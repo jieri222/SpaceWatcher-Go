@@ -1,0 +1,4 @@
+github.com/Eyevinn/hls-m3u8 v0.6.2 h1:TThNa4dIurxc5evAmwQ4YO5uGL+HY+x4zeS9T0RcC9I=
+github.com/Eyevinn/hls-m3u8 v0.6.2/go.mod h1:9jzVfwCo1+TC6yz+TKDBt9gIshzI9fhVE7M5AhcOSnQ=
+github.com/matryer/is v1.4.1 h1:55ehd8zaGABKLXQUe2awZ99BD/PTc2ls+KV/dXphgEQ=
+github.com/matryer/is v1.4.1/go.mod h1:8I/i5uYgLzgsgEloJE1U6xx5HkBQpAZvepWuujKwMRU=
