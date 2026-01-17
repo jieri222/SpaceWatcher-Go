@@ -45,10 +45,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     needs: [build, lint]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        goos: [linux, windows, darwin]
-        goarch: [amd64, arm64]
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -57,17 +55,24 @@ jobs:
         with:
           go-version: "1.22"
 
-      - name: Build binary
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
+      - name: Build all binaries
         run: |
-          ext=""
-          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
-          go build -ldflags="-s -w" -o SpaceWatcher-go-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd
+          mkdir -p dist
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/SpaceWatcher-go-linux-amd64 ./cmd
+          # Linux arm64
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dist/SpaceWatcher-go-linux-arm64 ./cmd
+          # Windows amd64
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/SpaceWatcher-go-windows-amd64.exe ./cmd
+          # Windows arm64
+          GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -o dist/SpaceWatcher-go-windows-arm64.exe ./cmd
+          # macOS amd64
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/SpaceWatcher-go-darwin-amd64 ./cmd
+          # macOS arm64
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/SpaceWatcher-go-darwin-arm64 ./cmd
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: SpaceWatcher-go-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: SpaceWatcher-go-*
+          files: dist/*
+          generate_release_notes: true
