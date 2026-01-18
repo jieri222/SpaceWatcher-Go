@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	StateRunning  = "Running"
-	StateLive     = "Live" // 實際直播中
-	StateEnded    = "Ended"
+	StateRunning = "Running" // 實際直播中
+	StateEnded   = "Ended"
+	// not sure the following states existed
 	StateTimedOut = "TimedOut"
 	StateCanceled = "Canceled"
 )
@@ -84,6 +84,9 @@ func (o *Observer) WatchUntilEnded(spaceID string) (*WatchResult, error) {
 		case StateCanceled, StateTimedOut:
 			result.FinalState = metadata.State
 			return result, fmt.Errorf("space ended with state: %s", metadata.State)
+		default:
+			Warn("未知的 Space 狀態", "spaceID", spaceID, "state", metadata.State)
+			return result, fmt.Errorf("unknown space state: %s", metadata.State)
 		}
 	}
 

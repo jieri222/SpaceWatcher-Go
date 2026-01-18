@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -54,7 +55,9 @@ func (f *FilenameFormatter) Format(metadata *SpaceMetadata) string {
 	}
 
 	// 清理 Windows 非法字元
-	result = sanitizeFilename(result)
+	if runtime.GOOS == "windows" {
+		result = sanitizeFilename(result)
+	}
 
 	return result
 }
