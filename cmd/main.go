@@ -106,8 +106,12 @@ func main() {
 		if *watch {
 			internal.Info("Space 正在直播中，開始監控", "interval", *interval)
 			observer := internal.NewObserver(session, time.Duration(*interval)*time.Second)
-			result, err := observer.WatchUntilEnded(spaceID)
+			result, err := observer.WatchUntilEnded(ctx, spaceID)
 			if err != nil {
+				if ctx.Err() != nil {
+					internal.Warn("監控已取消")
+					os.Exit(0)
+				}
 				internal.Error("監控失敗", "error", err)
 				os.Exit(1)
 			}

@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
@@ -40,7 +41,7 @@ type WatchResult struct {
 
 // WatchUntilEnded 監控 Space 直到結束
 // 返回最終的 metadata 和 state
-func (o *Observer) WatchUntilEnded(spaceID string) (*WatchResult, error) {
+func (o *Observer) WatchUntilEnded(ctx context.Context, spaceID string) (*WatchResult, error) {
 	result := &WatchResult{SpaceID: spaceID}
 
 	// 首次獲取狀態
@@ -64,33 +65,35 @@ func (o *Observer) WatchUntilEnded(spaceID string) (*WatchResult, error) {
 	ticker := time.NewTicker(o.interval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		resp, err := o.session.AudioSpaceById(spaceID)
-		if err != nil {
-			Warn("查詢失敗，重試中", "error", err)
-			continue
-		}
+	for {
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		case <-ticker.C:
+			resp, err := o.session.AudioSpaceById(spaceID)
+			if err != nil {
+				Warn("查詢失敗，重試中", "error", err)
+				continue
+			}
 
-		metadata = &resp.Data.AudioSpace.Metadata
-		result.Metadata = metadata
+			metadata = &resp.Data.AudioSpace.Metadata
+			result.Metadata = metadata
 
-		Debug("檢查 Space 狀態", "spaceID", spaceID, "state", metadata.State)
+			Debug("檢查 Space 狀態", "spaceID", spaceID, "state", metadata.State)
 
-		switch metadata.State {
-		case StateEnded:
-			result.FinalState = StateEnded
-			Info("Space 已結束", "spaceID", spaceID)
-			return result, nil
-		case StateCanceled, StateTimedOut:
-			result.FinalState = metadata.State
-			return result, fmt.Errorf("space ended with state: %s", metadata.State)
-		default:
-			Warn("未知的 Space 狀態", "spaceID", spaceID, "state", metadata.State)
-			return result, fmt.Errorf("unknown space state: %s", metadata.State)
+			switch metadata.State {
+			case StateEnded:
+				result.FinalState = StateEnded
+				Info("Space 已結束", "spaceID", spaceID)
+				return result, nil
+			case StateCanceled, StateTimedOut:
+				result.FinalState = metadata.State
+				return result, fmt.Errorf("space ended with state: %s", metadata.State)
+			default:
+				// other states (Running), continue loop
+			}
 		}
 	}
-
-	return result, nil
 }
 
 // CheckOnce 只檢查一次狀態
