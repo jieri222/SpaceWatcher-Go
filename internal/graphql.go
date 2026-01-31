@@ -13,9 +13,9 @@ const baseUrl = "https://x.com"
 // 可從瀏覽器 DevTools Network 找到 AudioSpaceById 請求
 const FallbackQueryID = "_TgkQtc04XURgCocb1y9CA"
 
-// Bootstrap 從 Space URL 取得 QueryID 並設定到 session
-func (s *TwitterSession) Bootstrap(spaceID string) error {
-	jsHash, err := s.findJSHash(spaceID)
+// DiscoverQueryID 從 Space URL 取得 QueryID 並設定到 session
+func (s *TwitterSession) DiscoverQueryID(spaceID string) error {
+	jsHash, err := s.extractJSHashFromPage(spaceID)
 	if err != nil {
 		// 使用 fallback
 		Warn("無法取得 JS hash，使用備用 QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
@@ -23,7 +23,7 @@ func (s *TwitterSession) Bootstrap(spaceID string) error {
 		return nil
 	}
 
-	queryID, featureSwitches, err := s.findQueryID(jsHash)
+	queryID, featureSwitches, err := s.parseQueryIDFromJS(jsHash)
 	if err != nil {
 		// 使用 fallback
 		Warn("無法取得 QueryID，使用備用 QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
@@ -31,13 +31,13 @@ func (s *TwitterSession) Bootstrap(spaceID string) error {
 		return nil
 	}
 
-	Debug("Bootstrap 完成", "queryID", queryID, "featureSwitches", featureSwitches)
+	Debug("DiscoverQueryID 完成", "queryID", queryID, "featureSwitches", featureSwitches)
 	s.queryID = queryID
 	s.featureSwitches = featureSwitches
 	return nil
 }
 
-func (s *TwitterSession) findJSHash(spaceID string) (string, error) {
+func (s *TwitterSession) extractJSHashFromPage(spaceID string) (string, error) {
 	ctx := context.Background()
 	spaceURL := fmt.Sprintf("%s/i/spaces/%s/peek", baseUrl, spaceID)
 
@@ -69,7 +69,7 @@ type QueryInfo struct {
 	FeatureSwitches []string
 }
 
-func (s *TwitterSession) findQueryID(jsHash string) (string, []string, error) {
+func (s *TwitterSession) parseQueryIDFromJS(jsHash string) (string, []string, error) {
 	ctx := context.Background()
 	url := fmt.Sprintf("https://abs.twimg.com/responsive-web/client-web/modules.audio.%sa.js", jsHash)
 

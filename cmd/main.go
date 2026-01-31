@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"os"
 	"os/signal"
 	"regexp"
@@ -10,17 +9,18 @@ import (
 	"time"
 
 	"spacewatcher/internal"
+
+	flag "github.com/spf13/pflag"
 )
 
 func main() {
 	// CLI 參數
 	spaceURL := flag.String("url", "", "Space URL 或 ID")
-	output := flag.String("o", "", "輸出檔案路徑 (覆蓋 -f 格式)")
-	format := flag.String("f", internal.DefaultFilenameFormat, "檔名格式: {date}, {time}, {datetime}, {title}, {creator_name}, {creator_screen_name}, {spaceID}")
-	watch := flag.Bool("watch", false, "監控模式：等待 Space 結束再下載")
-	workers := flag.Int("workers", 5, "下載併發數")
-	interval := flag.Int("interval", 30, "監控間隔 (秒)")
-	verbose := flag.Bool("v", false, "顯示詳細 log")
+	output := flag.StringP("output", "o", internal.DefaultFilenameFormat, "輸出檔案路徑，支援格式變數: {date}, {time}, {datetime}, {title}, {creator_name}, {creator_screen_name}, {spaceID}")
+	watch := flag.BoolP("watch", "w", false, "監控模式：等待 Space 結束再下載")
+	concurrency := flag.IntP("concurrency", "c", 5, "下載併發數")
+	interval := flag.IntP("interval", "i", 30, "監控間隔 (秒)")
+	verbose := flag.BoolP("verbose", "v", false, "顯示詳細 log")
 	flag.Parse()
 
 	// 初始化 Logger
@@ -73,10 +73,10 @@ func main() {
 	}
 	internal.Debug("Guest Token", "token", session.GetGuestToken())
 
-	// Bootstrap: 取得 QueryID
+	// 取得 QueryID
 	internal.Info("取得 API Query ID...")
-	if err := session.Bootstrap(spaceID); err != nil {
-		internal.Error("Bootstrap 失敗", "error", err)
+	if err := session.DiscoverQueryID(spaceID); err != nil {
+		internal.Error("取得 QueryID 失敗", "error", err)
 		os.Exit(1)
 	}
 	internal.Debug("Query ID", "id", session.GetQueryID())
@@ -91,15 +91,6 @@ func main() {
 
 	metadata := &spaceInfo.Data.AudioSpace.Metadata
 	internal.Info("Space 資訊", "title", metadata.Title)
-
-	// 決定輸出檔名
-	if *output != "" {
-		outputPath = *output
-	} else {
-		formatter := internal.NewFilenameFormatter(*format)
-		outputPath = formatter.Format(metadata)
-	}
-	internal.Debug("輸出檔案", "path", outputPath)
 
 	// 如果 Space 還在直播中
 	if metadata.State != internal.StateEnded {
@@ -122,6 +113,11 @@ func main() {
 		}
 	}
 
+	// 決定輸出檔名 (放在 watch 之後，確保用到最新的 metadata)
+	formatter := internal.NewFilenameFormatter(*output)
+	outputPath = formatter.Format(metadata)
+	internal.Debug("輸出檔案", "path", outputPath)
+
 	// 檢查是否已取消
 	if ctx.Err() != nil {
 		internal.Warn("已取消下載")
@@ -130,7 +126,7 @@ func main() {
 
 	// 下載
 	internal.Info("開始下載...")
-	downloader := internal.NewDownloader(session, *workers)
+	downloader := internal.NewDownloader(session, *concurrency)
 	if err := downloader.DownloadSpace(ctx, metadata.MediaKey, outputPath); err != nil {
 		if ctx.Err() != nil {
 			internal.Warn("下載已中斷")

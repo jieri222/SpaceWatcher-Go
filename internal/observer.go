@@ -2,7 +2,6 @@ package internal
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
@@ -10,8 +9,8 @@ const (
 	StateRunning = "Running" // 實際直播中
 	StateEnded   = "Ended"
 	// not sure the following states existed
-	StateTimedOut = "TimedOut"
-	StateCanceled = "Canceled"
+	// StateTimedOut = "TimedOut"
+	// StateCanceled = "Canceled"
 )
 
 // Observer 監控 Space 狀態
@@ -36,6 +35,7 @@ type WatchResult struct {
 	SpaceID    string
 	Metadata   *SpaceMetadata
 	FinalState string
+	M3U8URL    string
 	Error      error
 }
 
@@ -45,13 +45,20 @@ func (o *Observer) WatchUntilEnded(ctx context.Context, spaceID string) (*WatchR
 	result := &WatchResult{SpaceID: spaceID}
 
 	// 首次獲取狀態
-	resp, err := o.session.AudioSpaceById(spaceID)
+	metadata, err := o.fetchStatus(spaceID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get initial space info: %w", err)
+		return nil, err
 	}
-
-	metadata := &resp.Data.AudioSpace.Metadata
 	result.Metadata = metadata
+
+	// 先取得 m3u8 URL，避免在監控過程中斷線或是Space沒有存檔
+	m3u8URL, err := GetStreamURL(ctx, o.session.client, metadata.MediaKey)
+	if err != nil {
+		Error("取得 m3u8 URL 失敗", "error", err)
+		return nil, err
+	}
+	Debug("M3U8 URL", "url", m3u8URL)
+	result.M3U8URL = m3u8URL
 
 	// 如果已經結束，直接返回
 	if metadata.State == StateEnded {
@@ -70,34 +77,27 @@ func (o *Observer) WatchUntilEnded(ctx context.Context, spaceID string) (*WatchR
 		case <-ctx.Done():
 			return result, ctx.Err()
 		case <-ticker.C:
-			resp, err := o.session.AudioSpaceById(spaceID)
+			metadata, err := o.fetchStatus(spaceID)
 			if err != nil {
 				Warn("查詢失敗，重試中", "error", err)
 				continue
 			}
 
-			metadata = &resp.Data.AudioSpace.Metadata
 			result.Metadata = metadata
 
 			Debug("檢查 Space 狀態", "spaceID", spaceID, "state", metadata.State)
 
-			switch metadata.State {
-			case StateEnded:
+			if metadata.State == StateEnded {
 				result.FinalState = StateEnded
-				Info("Space 已結束", "spaceID", spaceID)
+				Info("Space 已結束，準備下載", "spaceID", spaceID)
 				return result, nil
-			case StateCanceled, StateTimedOut:
-				result.FinalState = metadata.State
-				return result, fmt.Errorf("space ended with state: %s", metadata.State)
-			default:
-				// other states (Running), continue loop
 			}
 		}
 	}
 }
 
-// CheckOnce 只檢查一次狀態
-func (o *Observer) CheckOnce(spaceID string) (*SpaceMetadata, error) {
+// fetchStatus 取得目前狀態
+func (o *Observer) fetchStatus(spaceID string) (*SpaceMetadata, error) {
 	resp, err := o.session.AudioSpaceById(spaceID)
 	if err != nil {
 		return nil, err

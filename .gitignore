@@ -26,3 +26,4 @@ go.work.sum
 
 *.js
 *.m4a
+.scannerwork
