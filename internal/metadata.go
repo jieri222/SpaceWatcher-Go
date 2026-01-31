@@ -24,13 +24,6 @@ func (s *TwitterSession) AudioSpaceById(spaceID string) (*AudioSpaceByIdResponse
 	featureSwitches := s.GetFeatureSwitches()
 	features := "{" + strings.Join(featureSwitches, ",") + "}"
 
-	// 確保有 guest token
-	if s.guestToken == "" {
-		if err := s.RefreshGuestToken(); err != nil {
-			return nil, fmt.Errorf("failed to refresh guest token: %w", err)
-		}
-	}
-
 	// 組裝 URL
 	apiURL, _ := url.Parse("https://api.x.com/graphql/" + s.queryID + "/AudioSpaceById")
 	q := apiURL.Query()
@@ -39,9 +32,25 @@ func (s *TwitterSession) AudioSpaceById(spaceID string) (*AudioSpaceByIdResponse
 	apiURL.RawQuery = q.Encode()
 
 	// 發送請求
-	resp, err := s.client.Get(ctx, apiURL.String(), http.Header{
+	body, err := doAudioSapcebyIdRequest(ctx, s, apiURL.String())
+	if err != nil {
+		return nil, err
+	}
+
+	return parseAudioSpaceByIdResponse(body)
+}
+
+func doAudioSapcebyIdRequest(ctx context.Context, session *TwitterSession, url string) ([]byte, error) {
+	// 確保有 guest token
+	if session.guestToken == "" {
+		if err := session.RefreshGuestToken(); err != nil {
+			return nil, fmt.Errorf("failed to refresh guest token: %w", err)
+		}
+	}
+
+	resp, err := session.client.Get(ctx, url, http.Header{
 		"Authorization": {"Bearer " + BearerToken},
-		"x-guest-token": {s.guestToken},
+		"x-guest-token": {session.guestToken},
 		"Content-Type":  {"application/json"},
 	})
 	if err != nil {
@@ -55,11 +64,19 @@ func (s *TwitterSession) AudioSpaceById(spaceID string) (*AudioSpaceByIdResponse
 		return nil, err
 	}
 
-	if resp.StatusCode != 200 {
+	switch resp.StatusCode {
+	case 200:
+		return body, nil
+	case 403: // 如果是 403，嘗試刷新 token 並重試
+		Warn("Guest token 可能已過期，嘗試刷新", "statusCode", resp.StatusCode)
+		if err := session.RefreshGuestToken(); err != nil {
+			return nil, fmt.Errorf("failed to refresh guest token after 403: %w", err)
+		}
+		Debug("Guest token 已刷新", "newToken", session.guestToken)
+		return doAudioSapcebyIdRequest(ctx, session, url)
+	default:
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
-
-	return parseAudioSpaceByIdResponse(body)
 }
 
 // AudioSpaceByIdResponse GraphQL 回應結構
