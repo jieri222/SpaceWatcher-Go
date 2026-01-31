@@ -32,7 +32,7 @@ func (s *TwitterSession) AudioSpaceById(spaceID string) (*AudioSpaceByIdResponse
 	apiURL.RawQuery = q.Encode()
 
 	// 發送請求
-	body, err := doAudioSapcebyIdRequest(ctx, s, apiURL.String())
+	body, err := doAudioSpaceByIdRequest(ctx, s, apiURL.String())
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func (s *TwitterSession) AudioSpaceById(spaceID string) (*AudioSpaceByIdResponse
 	return parseAudioSpaceByIdResponse(body)
 }
 
-func doAudioSapcebyIdRequest(ctx context.Context, session *TwitterSession, url string) ([]byte, error) {
+func doAudioSpaceByIdRequest(ctx context.Context, session *TwitterSession, url string) ([]byte, error) {
 	// 確保有 guest token
 	if session.guestToken == "" {
 		if err := session.RefreshGuestToken(); err != nil {
@@ -73,7 +73,7 @@ func doAudioSapcebyIdRequest(ctx context.Context, session *TwitterSession, url s
 			return nil, fmt.Errorf("failed to refresh guest token after 403: %w", err)
 		}
 		Debug("Guest token 已刷新", "newToken", session.guestToken)
-		return doAudioSapcebyIdRequest(ctx, session, url)
+		return doAudioSpaceByIdRequest(ctx, session, url)
 	default:
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
