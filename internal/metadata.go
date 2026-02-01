@@ -68,7 +68,7 @@ func doAudioSpaceByIdRequest(ctx context.Context, session *TwitterSession, url s
 	case 200:
 		return body, nil
 	case 403: // 如果是 403，嘗試刷新 token 並重試
-		if retryCount >= 1 {
+		if retryCount >= 3 {
 			return nil, fmt.Errorf("API error 403 after retry: %s", string(body))
 		}
 		Warn("Guest token 可能已過期，嘗試刷新", "statusCode", resp.StatusCode)
