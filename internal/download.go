@@ -11,34 +11,35 @@ import (
 	"time"
 )
 
-const DefaultWorkers = 5
+const (
+	DefaultWorkers = 5
+	DefaultRetry   = 3
+)
 
 // Downloader 下載器
 type Downloader struct {
 	session     *TwitterSession
 	concurrency int
+	retry       int
 }
 
 // NewDownloader 建立下載器
-func NewDownloader(session *TwitterSession, concurrency int) *Downloader {
+func NewDownloader(session *TwitterSession, concurrency int, retry int) *Downloader {
 	if concurrency <= 0 {
 		concurrency = DefaultWorkers
+	}
+	if retry <= 0 {
+		retry = DefaultRetry
 	}
 	return &Downloader{
 		session:     session,
 		concurrency: concurrency,
+		retry:       retry,
 	}
 }
 
 // DownloadSpace 完整下載流程 (串流下載+合併)
-func (d *Downloader) DownloadSpace(ctx context.Context, mediaKey string, outputPath string) error {
-	Info("取得串流 URL...")
-	m3u8URL, err := GetStreamURL(ctx, d.session.client, mediaKey)
-	if err != nil {
-		return fmt.Errorf("failed to get stream URL: %w", err)
-	}
-	Debug("M3U8 URL", "url", m3u8URL)
-
+func (d *Downloader) DownloadSpace(ctx context.Context, m3u8URL string, metadata *SpaceMetadata, outputPath string) error {
 	// 解析 m3u8
 	Info("解析播放清單...")
 	playlist, err := ParseM3U8(ctx, d.session.client, m3u8URL)
@@ -55,9 +56,9 @@ func (d *Downloader) DownloadSpace(ctx context.Context, mediaKey string, outputP
 		"-y",           // 覆蓋輸出
 		"-i", "pipe:0", // 從 stdin 讀取
 		"-c", "copy", // 無損複製
+		"-metadata", "title="+metadata.Title,
+		"-metadata", "artist="+metadata.CreatorResults.Result.Core.Name,
 		outputPath,
-		"-metadata", "title=",
-		"-metadata", "artist=",
 	)
 
 	stdin, err := cmd.StdinPipe()
@@ -93,7 +94,6 @@ func (d *Downloader) DownloadSpace(ctx context.Context, mediaKey string, outputP
 		return fmt.Errorf("ffmpeg error: %w", ffmpegErr)
 	}
 
-	Info("下載完成", "output", outputPath)
 	return nil
 }
 
@@ -126,7 +126,7 @@ func (d *Downloader) streamDownloadAndMerge(ctx context.Context, playlist *Playl
 					seg := playlist.Segments[idx]
 					segURL := seg.GetFullURL(playlist.BaseURL)
 
-					data, err := d.downloadSegmentWithRetry(ctx, segURL, 3)
+					data, err := d.downloadSegmentWithRetry(ctx, segURL, d.retry)
 					select {
 					case resultChan <- SegmentResult{Index: idx, Data: data, Error: err}:
 					case <-ctx.Done():

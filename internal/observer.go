@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -17,32 +18,36 @@ const (
 type Observer struct {
 	session  *TwitterSession
 	interval time.Duration
+	retry    int
 }
 
 // NewObserver 建立監控器
-func NewObserver(session *TwitterSession, interval time.Duration) *Observer {
+func NewObserver(session *TwitterSession, interval time.Duration, retry int) *Observer {
 	if interval < 10*time.Second {
 		interval = 30 * time.Second
+	}
+	if retry <= 0 {
+		retry = DefaultRetry
 	}
 	return &Observer{
 		session:  session,
 		interval: interval,
+		retry:    retry,
 	}
 }
 
-// WatchResult 監控結果
-type WatchResult struct {
+// WaitResult 等待結果
+type WaitResult struct {
 	SpaceID    string
 	Metadata   *SpaceMetadata
 	FinalState string
 	M3U8URL    string
-	Error      error
 }
 
-// WatchUntilEnded 監控 Space 直到結束
+// WaitUntilEnded 等待 Space 直到結束
 // 返回最終的 metadata 和 state
-func (o *Observer) WatchUntilEnded(ctx context.Context, spaceID string) (*WatchResult, error) {
-	result := &WatchResult{SpaceID: spaceID}
+func (o *Observer) WaitUntilEnded(ctx context.Context, spaceID string) (*WaitResult, error) {
+	result := &WaitResult{SpaceID: spaceID}
 
 	// 首次獲取狀態
 	metadata, err := o.fetchStatus(spaceID)
@@ -51,7 +56,7 @@ func (o *Observer) WatchUntilEnded(ctx context.Context, spaceID string) (*WatchR
 	}
 	result.Metadata = metadata
 
-	// 先取得 m3u8 URL，避免在監控過程中斷線或是Space沒有存檔
+	// 先取得 m3u8 URL，避免過程中斷線或是Space沒有存檔
 	m3u8URL, err := GetStreamURL(ctx, o.session.client, metadata.MediaKey)
 	if err != nil {
 		Error("取得 m3u8 URL 失敗", "error", err)
@@ -68,10 +73,11 @@ func (o *Observer) WatchUntilEnded(ctx context.Context, spaceID string) (*WatchR
 	}
 
 	// 開始輪詢
-	Info("開始監控 Space", "spaceID", spaceID, "state", metadata.State, "interval", o.interval)
+	Info("開始等待 Space 結束", "spaceID", spaceID, "interval", o.interval)
 	ticker := time.NewTicker(o.interval)
 	defer ticker.Stop()
 
+	consecutiveErrors := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -79,9 +85,14 @@ func (o *Observer) WatchUntilEnded(ctx context.Context, spaceID string) (*WatchR
 		case <-ticker.C:
 			metadata, err := o.fetchStatus(spaceID)
 			if err != nil {
-				Warn("查詢失敗，重試中", "error", err)
+				consecutiveErrors++
+				Warn("查詢失敗，重試中", "error", err, "attempt", consecutiveErrors, "maxRetry", o.retry)
+				if consecutiveErrors >= o.retry {
+					return nil, fmt.Errorf("查詢失敗超過重試次數: %w", err)
+				}
 				continue
 			}
+			consecutiveErrors = 0 // 成功後重置
 
 			result.Metadata = metadata
 
