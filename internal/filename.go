@@ -2,8 +2,8 @@ package internal
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -54,9 +54,15 @@ func (f *FilenameFormatter) Format(metadata *SpaceMetadata) string {
 		result = strings.ReplaceAll(result, placeholder, value)
 	}
 
-	// 清理 Windows 非法字元
-	if runtime.GOOS == "windows" {
-		result = sanitizeFilename(result)
+	// 清理檔名中的非法字元 (只處理檔名部分，保留目錄路徑)
+	// 為確保跨平台相容性，所有平台都執行
+	dir := filepath.Dir(result)
+	filename := filepath.Base(result)
+	filename = sanitizeFilename(filename)
+	if dir != "." {
+		result = filepath.Join(dir, filename)
+	} else {
+		result = filename
 	}
 
 	return result
