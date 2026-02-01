@@ -53,7 +53,8 @@ func (d *Downloader) DownloadSpace(ctx context.Context, m3u8URL string, metadata
 	Info("開始下載", "concurrency", d.concurrency)
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-loglevel", "error",
-		"-y",           // 覆蓋輸出
+		"-y",        // 覆蓋輸出
+		"-f", "aac", // 指定輸入格式
 		"-i", "pipe:0", // 從 stdin 讀取
 		"-c", "copy", // 無損複製
 		"-metadata", "title="+metadata.Title,

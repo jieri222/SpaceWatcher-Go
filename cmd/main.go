@@ -17,8 +17,8 @@ func main() {
 	// CLI 參數
 	spaceURL := flag.String("url", "", "Space URL 或 ID")
 	output := flag.StringP("output", "o", internal.DefaultFilenameFormat, "輸出檔案路徑，支援格式變數: {date}, {time}, {datetime}, {title}, {creator_name}, {creator_screen_name}, {spaceID}")
-	watch := flag.BoolP("watch", "w", false, "監控模式：等待 Space 結束再下載")
-	concurrency := flag.IntP("concurrency", "c", 5, "下載併發數")
+	concurrency := flag.IntP("concurrency", "c", internal.DefaultWorkers, "下載併發數")
+	retry := flag.IntP("retry", "r", internal.DefaultRetry, "下載/等待重試次數")
 	interval := flag.IntP("interval", "i", 30, "監控間隔 (秒)")
 	verbose := flag.BoolP("verbose", "v", false, "顯示詳細 log")
 	flag.Parse()
@@ -48,8 +48,8 @@ func main() {
 		internal.Info("範例:")
 		internal.Info("  spacewatcher https://x.com/i/spaces/xxxxxxxxxxxxx")
 		internal.Info("  spacewatcher -o space.m4a https://x.com/i/spaces/xxxxx")
-		internal.Info("  spacewatcher -f \"{date}_{creator_name}.m4a\" https://x.com/i/spaces/xxxxx")
-		internal.Info("  spacewatcher -watch -v https://x.com/i/spaces/xxxxx")
+		internal.Info("  spacewatcher -o \"{date}_{creator_name}.m4a\" https://x.com/i/spaces/xxxxx")
+		internal.Info("  spacewatcher -v https://x.com/i/spaces/xxxxx")
 		os.Exit(1)
 	}
 
@@ -60,9 +60,6 @@ func main() {
 		os.Exit(1)
 	}
 	internal.Info("Space ID", "id", spaceID)
-
-	// 輸出路徑稍後根據 metadata 決定
-	var outputPath string
 
 	// 初始化 Session
 	internal.Info("初始化 Session...")
@@ -92,44 +89,45 @@ func main() {
 	metadata := &spaceInfo.Data.AudioSpace.Metadata
 	internal.Info("Space 資訊", "title", metadata.Title)
 
-	// 如果 Space 還在直播中
+	var m3u8URL string
+
+	// 如果 Space 還在直播中，等待結束
 	if metadata.State != internal.StateEnded {
-		if *watch {
-			internal.Info("Space 正在直播中，開始監控", "interval", *interval)
-			observer := internal.NewObserver(session, time.Duration(*interval)*time.Second)
-			result, err := observer.WatchUntilEnded(ctx, spaceID)
-			if err != nil {
-				if ctx.Err() != nil {
-					internal.Warn("監控已取消")
-					os.Exit(0)
-				}
-				internal.Error("監控失敗", "error", err)
-				os.Exit(1)
+		internal.Info("Space 正在直播中，開始等待", "interval", *interval)
+		observer := internal.NewObserver(session, time.Duration(*interval)*time.Second, *retry)
+		result, err := observer.WaitUntilEnded(ctx, spaceID)
+		if err != nil {
+			if ctx.Err() != nil {
+				internal.Warn("已取消")
+				os.Exit(0)
 			}
-			metadata = result.Metadata
-		} else {
-			internal.Warn("Space 尚未結束。使用 -watch 參數來監控直到結束。")
-			os.Exit(0)
+			internal.Error("等待失敗", "error", err)
+			os.Exit(1)
+		}
+		metadata = result.Metadata
+		m3u8URL = result.M3U8URL
+	} else {
+		// Space 已結束，直接取得 m3u8 URL
+		internal.Info("取得串流 URL...")
+		var err error
+		m3u8URL, err = internal.GetStreamURL(ctx, session.GetClient(), metadata.MediaKey)
+		if err != nil {
+			internal.Error("取得串流 URL 失敗", "error", err)
+			os.Exit(1)
 		}
 	}
 
-	// 決定輸出檔名 (放在 watch 之後，確保用到最新的 metadata)
+	// 決定輸出檔名
 	formatter := internal.NewFilenameFormatter(*output)
-	outputPath = formatter.Format(metadata)
+	outputPath := formatter.Format(metadata)
 	internal.Debug("輸出檔案", "path", outputPath)
-
-	// 檢查是否已取消
-	if ctx.Err() != nil {
-		internal.Warn("已取消下載")
-		os.Exit(0)
-	}
 
 	// 下載
 	internal.Info("開始下載...")
-	downloader := internal.NewDownloader(session, *concurrency)
-	if err := downloader.DownloadSpace(ctx, metadata.MediaKey, outputPath); err != nil {
+	downloader := internal.NewDownloader(session, *concurrency, *retry)
+	if err := downloader.DownloadSpace(ctx, m3u8URL, metadata, outputPath); err != nil {
 		if ctx.Err() != nil {
-			internal.Warn("下載已中斷")
+			internal.Warn("已取消下載")
 			os.Exit(0)
 		}
 		internal.Error("下載失敗", "error", err)
@@ -148,17 +146,12 @@ func parseSpaceID(input string) string {
 		return input
 	}
 
-	// URL 格式: https://x.com/i/spaces/1vOxwdaQjpgKB 或 twitter.com 變體
-	patterns := []string{
-		`(?:twitter\.com|x\.com)/i/spaces/([a-zA-Z0-9]+)`,
-	}
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		match := re.FindStringSubmatch(input)
-		if len(match) > 1 {
-			return match[1]
-		}
+	// URL 格式: https://x.com/i/spaces/xxxxxxxxxxxxx 或 twitter.com 變體
+	pattern := `(?:twitter\.com|x\.com)/i/spaces/([a-zA-Z0-9]+)`
+	re := regexp.MustCompile(pattern)
+	match := re.FindStringSubmatch(input)
+	if len(match) > 1 {
+		return match[1]
 	}
 
 	return ""
