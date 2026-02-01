@@ -3,7 +3,6 @@ package internal
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 )
@@ -78,12 +77,7 @@ func (s *TwitterSession) GetFeatureSwitches() []string {
 	return s.featureSwitches
 }
 
-func SessionInit() {
-	session := NewTwitterSession()
-	err := session.RefreshGuestToken()
-	if err != nil {
-		fmt.Println("初始化失敗:", err)
-		return
-	}
-	fmt.Println("Session 已就緒, Guest Token:", session.guestToken)
+// GetClient 取得 HTTP client
+func (s *TwitterSession) GetClient() *Client {
+	return s.client
 }
