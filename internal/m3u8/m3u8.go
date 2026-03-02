@@ -31,7 +31,7 @@ type StreamStatus struct {
 // GetSourceLocation
 // 若 Space 尚未結束，會回傳 dynamic playlist URL
 // 若 Space 已結束，會回傳最終的 m3u8 URL
-func getSourceLocation(ctx context.Context, client *client.Client, mediaKey string) (string, error) {
+func GetSourceLocation(ctx context.Context, client *client.Client, mediaKey string) (string, error) {
 	url := BaseStreamAPI + mediaKey
 
 	resp, err := client.Get(ctx, url, nil)

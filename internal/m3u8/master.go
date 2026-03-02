@@ -15,7 +15,7 @@ import (
 
 // GetMasterPlaylistURL 將 dynamic playlist URL 轉換為 master playlist URL
 func GetMasterPlaylistURL(ctx context.Context, client *client.Client, mediaKey string) (string, error) {
-	dynamicURL, err := getSourceLocation(ctx, client, mediaKey)
+	dynamicURL, err := GetSourceLocation(ctx, client, mediaKey)
 	if err != nil {
 		return "", err
 	}
