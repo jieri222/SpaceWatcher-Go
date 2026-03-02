@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/cookiejar"
+	"spacewatcher/internal/client"
 )
 
 const (
@@ -12,7 +13,7 @@ const (
 )
 
 type TwitterSession struct {
-	client          *Client
+	client          *client.Client
 	guestToken      string
 	queryID         string
 	featureSwitches []string
@@ -21,7 +22,7 @@ type TwitterSession struct {
 // NewTwitterSession 初始化一個帶有 Cookie 管理的 Session
 func NewTwitterSession() *TwitterSession {
 	jar, _ := cookiejar.New(nil)
-	client := NewClient()
+	client := client.NewClient()
 	client.HTTPClient.Jar = jar
 	return &TwitterSession{
 		client: client,
@@ -78,6 +79,6 @@ func (s *TwitterSession) GetFeatureSwitches() []string {
 }
 
 // GetClient 取得 HTTP client
-func (s *TwitterSession) GetClient() *Client {
+func (s *TwitterSession) GetClient() *client.Client {
 	return s.client
 }

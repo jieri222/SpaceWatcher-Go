@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"spacewatcher/internal/logger"
 	"strings"
 	"time"
 )
@@ -20,10 +21,10 @@ type FilenameFormatter struct {
 
 // NewFilenameFormatter 建立格式化器
 func NewFilenameFormatter(format string) *FilenameFormatter {
-	Debug("使用格式", "format", format)
 	if format == "" {
 		format = DefaultFilenameFormat
 	}
+	logger.Debug("套用檔名格式", "format", format)
 	return &FilenameFormatter{format: format}
 }
 
@@ -38,12 +39,18 @@ func (f *FilenameFormatter) Format(metadata *SpaceMetadata) string {
 		startTime = time.Now()
 	}
 
+	// Title fallback
+	title := metadata.Title
+	if title == "" {
+		title = fmt.Sprintf("%s's Space", metadata.CreatorResults.Result.Core.Name)
+	}
+
 	// 準備替換變數
 	replacements := map[string]string{
 		"{date}":                startTime.Format("20060102"),
 		"{time}":                startTime.Format("150405"),
 		"{datetime}":            startTime.Format("20060102_150405"),
-		"{title}":               metadata.Title,
+		"{title}":               title,
 		"{creator_name}":        metadata.CreatorResults.Result.Core.Name,
 		"{creator_screen_name}": fmt.Sprintf("@%s", metadata.CreatorResults.Result.Core.ScreenName),
 		"{spaceID}":             metadata.RestID,

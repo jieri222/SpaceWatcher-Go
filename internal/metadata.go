@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"spacewatcher/internal/logger"
 	"strings"
 )
 
@@ -71,11 +72,11 @@ func doAudioSpaceByIdRequest(ctx context.Context, session *TwitterSession, url s
 		if retryCount >= 3 {
 			return nil, fmt.Errorf("API error 403 after retry: %s", string(body))
 		}
-		Warn("Guest token 可能已過期，嘗試刷新", "statusCode", resp.StatusCode)
+		logger.Warn("Guest token 可能已過期，嘗試刷新", "statusCode", resp.StatusCode)
 		if err := session.RefreshGuestToken(); err != nil {
 			return nil, fmt.Errorf("failed to refresh guest token after 403: %w", err)
 		}
-		Debug("Guest token 已刷新", "newToken", session.guestToken)
+		logger.Debug("Guest token 已刷新", "token", session.guestToken)
 		return doAudioSpaceByIdRequest(ctx, session, url, retryCount+1)
 	default:
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
@@ -94,12 +95,13 @@ type AudioSpaceByIdResponse struct {
 
 // SpaceMetadata Space 的 metadata
 type SpaceMetadata struct {
-	RestID         string `json:"rest_id"`
-	State          string `json:"state"`
-	Title          string `json:"title"`
-	MediaKey       string `json:"media_key"`
-	StartedAt      int64  `json:"started_at"`
-	CreatorResults struct {
+	RestID                    string `json:"rest_id"`
+	State                     string `json:"state"`
+	Title                     string `json:"title"`
+	MediaKey                  string `json:"media_key"`
+	StartedAt                 int64  `json:"started_at"`
+	IsSpaceAvailableforReplay bool   `json:"is_space_available_for_replay"`
+	CreatorResults            struct {
 		Result struct {
 			Core struct {
 				Name       string `json:"name"`

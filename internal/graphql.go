@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"spacewatcher/internal/logger"
 )
 
 const baseUrl = "https://x.com"
@@ -18,7 +19,7 @@ func (s *TwitterSession) DiscoverQueryID(spaceID string) error {
 	jsHash, err := s.extractJSHashFromPage(spaceID)
 	if err != nil {
 		// 使用 fallback
-		Warn("無法取得 JS hash，使用備用 QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
+		logger.Warn("無法取得 JS hash，使用備用 QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
 		s.queryID = FallbackQueryID
 		return nil
 	}
@@ -26,12 +27,12 @@ func (s *TwitterSession) DiscoverQueryID(spaceID string) error {
 	queryID, featureSwitches, err := s.parseQueryIDFromJS(jsHash)
 	if err != nil {
 		// 使用 fallback
-		Warn("無法取得 QueryID，使用備用 QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
+		logger.Warn("無法取得 QueryID，使用備用 QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
 		s.queryID = FallbackQueryID
 		return nil
 	}
 
-	Debug("DiscoverQueryID 完成", "queryID", queryID, "featureSwitches", featureSwitches)
+	logger.Debug("取得 QueryID", "queryID", queryID, "featureSwitches", featureSwitches)
 	s.queryID = queryID
 	s.featureSwitches = featureSwitches
 	return nil
