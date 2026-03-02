@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"spacewatcher/internal/logger"
+	"spacewatcher/internal/m3u8"
 	"strings"
 	"sync"
 	"time"
@@ -41,23 +43,28 @@ func NewDownloader(session *TwitterSession, concurrency int, retry int) *Downloa
 // DownloadSpace 完整下載流程 (串流下載+合併)
 func (d *Downloader) DownloadSpace(ctx context.Context, m3u8URL string, metadata *SpaceMetadata, outputPath string) error {
 	// 解析 m3u8
-	Info("解析播放清單...")
-	playlist, err := ParseM3U8(ctx, d.session.client, m3u8URL)
+	logger.Info("解析播放清單...")
+	playlist, err := m3u8.ParseM3U8(ctx, d.session.client, m3u8URL)
 	if err != nil {
 		return fmt.Errorf("failed to parse m3u8: %w", err)
 	}
 	total := len(playlist.Segments)
-	Info("找到 segments", "count", total)
+	logger.Info("找到 segments", "count", total)
 
 	// 啟動 ffmpeg
-	Info("開始下載", "concurrency", d.concurrency)
+	logger.Info("開始下載", "concurrency", d.concurrency)
+	title := metadata.Title
+	if title == "" {
+		title = fmt.Sprintf("%s's Space", metadata.CreatorResults.Result.Core.Name)
+	}
+
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-loglevel", "error",
 		"-y",        // 覆蓋輸出
 		"-f", "aac", // 指定輸入格式
 		"-i", "pipe:0", // 從 stdin 讀取
 		"-c", "copy", // 無損複製
-		"-metadata", "title="+metadata.Title,
+		"-metadata", "title="+title,
 		"-metadata", "artist="+metadata.CreatorResults.Result.Core.Name,
 		outputPath,
 	)
@@ -106,7 +113,7 @@ type SegmentResult struct {
 }
 
 // streamDownloadAndMerge 串流下載並按順序寫入 ffmpeg
-func (d *Downloader) streamDownloadAndMerge(ctx context.Context, playlist *Playlist, writer io.Writer, total int) error {
+func (d *Downloader) streamDownloadAndMerge(ctx context.Context, playlist *m3u8.Playlist, writer io.Writer, total int) error {
 	resultChan := make(chan SegmentResult, d.concurrency*2)
 	jobs := make(chan int, total)
 
@@ -200,7 +207,7 @@ func (d *Downloader) streamDownloadAndMerge(ctx context.Context, playlist *Playl
 		}
 
 		if completed%50 == 0 || completed == total {
-			Debug("下載進度", "completed", fmt.Sprintf("%d/%d", completed, total))
+			logger.Info("下載進度", "completed", completed, "total", total)
 		}
 	}
 
@@ -243,7 +250,8 @@ func (d *Downloader) downloadSegmentWithRetry(ctx context.Context, url string, m
 			return data, nil
 		}
 		lastErr = err
-		Debug("Segment 下載失敗，重試中", "attempt", i+1, "error", err)
+		logger.Debug("segment 下載失敗，重試中", "attempt", i+1, "maxRetry", maxRetries, "error", err)
 	}
+	logger.Error("segment 下載失敗", "url", url, "error", lastErr)
 	return nil, lastErr
 }
