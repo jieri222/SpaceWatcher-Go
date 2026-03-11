@@ -7,8 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"spacewatcher/internal/logger"
 	"strings"
+
+	"github.com/jieri222/SpaceWatcher-Go/internal/logger"
 )
 
 // AudioSpaceById 取得 Space 的 metadata

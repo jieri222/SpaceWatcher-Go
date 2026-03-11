@@ -6,11 +6,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"spacewatcher/internal/logger"
-	"spacewatcher/internal/m3u8"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jieri222/SpaceWatcher-Go/internal/logger"
+	"github.com/jieri222/SpaceWatcher-Go/internal/m3u8"
 )
 
 const (

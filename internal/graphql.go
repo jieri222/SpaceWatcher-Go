@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"spacewatcher/internal/logger"
+
+	"github.com/jieri222/SpaceWatcher-Go/internal/logger"
 )
 
 const baseUrl = "https://x.com"

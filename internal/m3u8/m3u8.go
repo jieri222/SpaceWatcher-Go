@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"spacewatcher/internal/client"
+	"github.com/jieri222/SpaceWatcher-Go/internal/client"
 
 	"github.com/Eyevinn/hls-m3u8/m3u8"
 )

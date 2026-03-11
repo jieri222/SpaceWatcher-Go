@@ -1,4 +1,4 @@
-module spacewatcher
+module github.com/jieri222/SpaceWatcher-Go
 
 go 1.24.2
 

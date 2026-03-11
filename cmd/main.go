@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"spacewatcher/internal"
-	"spacewatcher/internal/logger"
+	"github.com/jieri222/SpaceWatcher-Go/internal"
+	"github.com/jieri222/SpaceWatcher-Go/internal/logger"
 
 	flag "github.com/spf13/pflag"
 )

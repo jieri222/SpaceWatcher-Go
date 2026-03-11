@@ -6,9 +6,10 @@ import (
 	"io"
 	"net/url"
 	"regexp"
-	"spacewatcher/internal/client"
-	"spacewatcher/internal/logger"
 	"strings"
+
+	"github.com/jieri222/SpaceWatcher-Go/internal/client"
+	"github.com/jieri222/SpaceWatcher-Go/internal/logger"
 
 	"github.com/Eyevinn/hls-m3u8/m3u8"
 )

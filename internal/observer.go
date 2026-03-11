@@ -3,9 +3,10 @@ package internal
 import (
 	"context"
 	"fmt"
-	"spacewatcher/internal/logger"
-	"spacewatcher/internal/m3u8"
 	"time"
+
+	"github.com/jieri222/SpaceWatcher-Go/internal/logger"
+	"github.com/jieri222/SpaceWatcher-Go/internal/m3u8"
 )
 
 const (

@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/cookiejar"
-	"spacewatcher/internal/client"
+
+	"github.com/jieri222/SpaceWatcher-Go/internal/client"
 )
 
 const (

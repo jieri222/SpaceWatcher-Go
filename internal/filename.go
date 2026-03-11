@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"spacewatcher/internal/logger"
 	"strings"
 	"time"
+
+	"github.com/jieri222/SpaceWatcher-Go/internal/logger"
 )
 
 const (
