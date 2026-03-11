@@ -37,12 +37,10 @@ spacewatcher -o "{date}_{creator_name}_{title}.m4a" https://x.com/i/spaces/xxxxx
 spacewatcher -v https://x.com/i/spaces/xxxxx
 ```
 
-> ⚠️ **注意**: 所有選項必須放在 URL 之前
-
 ## 參數說明
 
 | 參數 | 短 | 說明 | 預設值 |
-|------|-----|------|--------|
+| ------ | --- | ---- | ------ |
 | `--output` | `-o` | 輸出檔案路徑/格式 | `{date}_{title}.m4a` |
 | `--concurrency` | `-c` | 下載併發數 | `5` |
 | `--retry` | `-r` | 重試次數 | `3` |
@@ -52,7 +50,7 @@ spacewatcher -v https://x.com/i/spaces/xxxxx
 ## 檔名格式變數
 
 | 變數 | 說明 | 範例 |
-|------|------|------|
+| ------ | ---- | ---- |
 | `{date}` | 開始日期 | `20260117` |
 | `{time}` | 開始時間 | `210000` |
 | `{datetime}` | 日期時間 | `20260117_210000` |
@@ -68,3 +66,7 @@ spacewatcher -v https://x.com/i/spaces/xxxxx
 ## 授權
 
 MIT License
+
+## 致謝 (Acknowledgments)
+
+本專案的 API 解析與下載流程，受到了 [HoloArchivists/twspace-dl](https://github.com/HoloArchivists/twspace-dl) 的啟發。
