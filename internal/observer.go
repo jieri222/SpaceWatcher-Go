@@ -154,8 +154,7 @@ func (o *Observer) waitUntilEnded(ctx context.Context, spaceID string, metadata 
 				}
 			}
 
-			switch metadata.State {
-			case StateEnded:
+			if metadata.State == StateEnded {
 				result.FinalState = StateEnded
 				logger.Debug("Space 已結束，解析 master playlist")
 
@@ -170,10 +169,6 @@ func (o *Observer) waitUntilEnded(ctx context.Context, spaceID string, metadata 
 				result.M3U8URL = m3u8URL
 				logger.Debug("取得 media playlist URL", "url", m3u8URL)
 				return result, nil
-			case StateRunning:
-				logger.Info("Space 進行中，繼續等待...")
-			case StateNotStarted:
-				logger.Info("Space 尚未開始，繼續等待...")
 			}
 		}
 	}
