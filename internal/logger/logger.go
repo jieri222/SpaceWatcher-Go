@@ -12,7 +12,7 @@ import (
 // ConsoleHandler handles log records and outputs them to the console with colors.
 type ConsoleHandler struct {
 	w        io.Writer
-	mu       sync.Mutex
+	mu       *sync.Mutex
 	opts     slog.HandlerOptions
 	levelVar *slog.LevelVar
 	preAttrs []slog.Attr
@@ -26,7 +26,7 @@ func NewConsoleHandler(w io.Writer, opts *slog.HandlerOptions) *ConsoleHandler {
 	}
 	lv := &slog.LevelVar{}
 	lv.Set(opts.Level.Level())
-	return &ConsoleHandler{w: w, opts: *opts, levelVar: lv}
+	return &ConsoleHandler{w: w, mu: &sync.Mutex{}, opts: *opts, levelVar: lv}
 }
 
 // Enabled checks if the log level is enabled.
