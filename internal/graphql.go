@@ -16,8 +16,8 @@ const baseUrl = "https://x.com"
 const FallbackQueryID = "_TgkQtc04XURgCocb1y9CA"
 
 // DiscoverQueryID 從 Space URL 取得 QueryID 並設定到 session
-func (s *TwitterSession) DiscoverQueryID(spaceID string) error {
-	jsHash, err := s.extractJSHashFromPage(spaceID)
+func (s *TwitterSession) DiscoverQueryID() error {
+	jsHash, err := s.extractJSHashFromPage()
 	if err != nil {
 		// 使用 fallback
 		logger.Warn("無法取得 JS hash，使用備用 QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
@@ -39,11 +39,10 @@ func (s *TwitterSession) DiscoverQueryID(spaceID string) error {
 	return nil
 }
 
-func (s *TwitterSession) extractJSHashFromPage(spaceID string) (string, error) {
+func (s *TwitterSession) extractJSHashFromPage() (string, error) {
 	ctx := context.Background()
-	spaceURL := fmt.Sprintf("%s/i/spaces/%s/peek", baseUrl, spaceID)
 
-	resp, err := s.client.Get(ctx, spaceURL, nil)
+	resp, err := s.client.Get(ctx, baseUrl, nil)
 	if err != nil {
 		return "", err
 	}
@@ -54,15 +53,22 @@ func (s *TwitterSession) extractJSHashFromPage(spaceID string) (string, error) {
 		return "", err
 	}
 
-	pattern := `"modules\.audio":\s*"([a-zA-Z0-9]+)"`
+	// Step 1: 找 chunk ID，例如 23441: "modules.audio"
+	chunkIDPattern := regexp.MustCompile(`(\d+):\s*"modules\.audio"`)
+	chunkMatch := chunkIDPattern.FindSubmatch(body)
+	if len(chunkMatch) < 2 {
+		return "", fmt.Errorf("could not find modules.audio chunk ID (body length: %d)", len(body))
+	}
+	chunkID := string(chunkMatch[1])
 
-	re := regexp.MustCompile(pattern)
-	match := re.FindSubmatch(body)
-	if len(match) > 1 {
-		return string(match[1]), nil
+	// Step 2: 找對應的 hash，例如 23441: "d85c73e"
+	hashPattern := regexp.MustCompile(chunkID + `:\s*"([a-fA-F0-9]+)"`)
+	hashMatch := hashPattern.FindSubmatch(body)
+	if len(hashMatch) < 2 {
+		return "", fmt.Errorf("could not find hash for chunk ID %s (body length: %d)", chunkID, len(body))
 	}
 
-	return "", fmt.Errorf("could not find JS hash in HTML (body length: %d)", len(body))
+	return string(hashMatch[1]), nil
 }
 
 // QueryInfo 存儲從 JS 提取的 GraphQL 查詢資訊

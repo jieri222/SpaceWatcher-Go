@@ -73,7 +73,7 @@ func main() {
 
 	// 取得 QueryID
 	logger.Info("取得 API Query ID...")
-	if err := session.DiscoverQueryID(spaceID); err != nil {
+	if err := session.DiscoverQueryID(); err != nil {
 		logger.Error("取得 QueryID 失敗", "error", err)
 		os.Exit(1)
 	}
