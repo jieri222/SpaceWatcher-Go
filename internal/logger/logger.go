@@ -11,9 +11,12 @@ import (
 
 // ConsoleHandler handles log records and outputs them to the console with colors.
 type ConsoleHandler struct {
-	w    io.Writer
-	mu   sync.Mutex
-	opts slog.HandlerOptions
+	w        io.Writer
+	mu       sync.Mutex
+	opts     slog.HandlerOptions
+	levelVar *slog.LevelVar
+	preAttrs []slog.Attr
+	group    string
 }
 
 // NewConsoleHandler creates a new ConsoleHandler.
@@ -21,12 +24,14 @@ func NewConsoleHandler(w io.Writer, opts *slog.HandlerOptions) *ConsoleHandler {
 	if opts == nil {
 		opts = &slog.HandlerOptions{}
 	}
-	return &ConsoleHandler{w: w, opts: *opts}
+	lv := &slog.LevelVar{}
+	lv.Set(opts.Level.Level())
+	return &ConsoleHandler{w: w, opts: *opts, levelVar: lv}
 }
 
 // Enabled checks if the log level is enabled.
 func (h *ConsoleHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= h.opts.Level.Level()
+	return level >= h.levelVar.Level()
 }
 
 // Handle outputs the log record.
@@ -60,16 +65,36 @@ func (h *ConsoleHandler) Handle(ctx context.Context, r slog.Record) error {
 	// Format: TIME [LEVEL] MESSAGE
 	fmt.Fprintf(h.w, "%s %s[%s]%s %s", timestamp, levelColor, levelStr, resetColor, r.Message)
 
-	// Append attributes with visual separator: MSG | key: val, key: val
+	// Helper to format attributes
 	hasAttrs := false
-	r.Attrs(func(a slog.Attr) bool {
+	printAttr := func(a slog.Attr, prefix string) {
+		if a.Equal(slog.Attr{}) {
+			return // ignore empty attributes
+		}
 		if !hasAttrs {
 			fmt.Fprintf(h.w, " %s|%s", dimColor, resetColor)
 			hasAttrs = true
 		} else {
 			fmt.Fprintf(h.w, "%s,%s", dimColor, resetColor)
 		}
-		fmt.Fprintf(h.w, " %s%s:%s %v", dimColor, a.Key, resetColor, a.Value.Any())
+		key := prefix + a.Key
+		fmt.Fprintf(h.w, " %s%s:%s %v", dimColor, key, resetColor, a.Value.Any())
+	}
+
+	// Group prefix
+	prefix := ""
+	if h.group != "" {
+		prefix = h.group + "."
+	}
+
+	// Print pre-configured attributes
+	for _, a := range h.preAttrs {
+		printAttr(a, prefix)
+	}
+
+	// Print record attributes
+	r.Attrs(func(a slog.Attr) bool {
+		printAttr(a, prefix)
 		return true
 	})
 
@@ -78,15 +103,27 @@ func (h *ConsoleHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 // WithAttrs returns a new handler with the given attributes.
-// For simplicity in this specific task, we're not implementing full attribute carrying
-// because the usage in this project is simple direct calls.
 func (h *ConsoleHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return h
+	if len(attrs) == 0 {
+		return h
+	}
+	h2 := *h
+	h2.preAttrs = append(h2.preAttrs[:len(h2.preAttrs):len(h2.preAttrs)], attrs...)
+	return &h2
 }
 
 // WithGroup returns a new handler with the given group.
 func (h *ConsoleHandler) WithGroup(name string) slog.Handler {
-	return h
+	if name == "" {
+		return h
+	}
+	h2 := *h
+	if h2.group != "" {
+		h2.group += "." + name
+	} else {
+		h2.group = name
+	}
+	return &h2
 }
 
 // Log level constants for external configuration
@@ -113,10 +150,10 @@ func InitLogger(verbose bool) {
 	slog.SetDefault(logger)
 }
 
-// SetLogLevel dynamically changes the log level
+// SetLogLevel dynamically changes the log level (atomic, goroutine-safe)
 func SetLogLevel(level slog.Level) {
 	if defaultHandler != nil {
-		defaultHandler.opts.Level = level
+		defaultHandler.levelVar.Set(level)
 	}
 }
 

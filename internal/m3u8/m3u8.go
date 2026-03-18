@@ -14,7 +14,7 @@ import (
 
 const BaseStreamAPI = "https://api.x.com/1.1/live_video_stream/status/"
 
-// StreamStatus live_video_stream/status 回應
+// StreamStatus represents the live_video_stream/status response
 type StreamStatus struct {
 	Source struct {
 		Location              string `json:"location"`
@@ -29,20 +29,20 @@ type StreamStatus struct {
 }
 
 // GetSourceLocation
-// 若 Space 尚未結束，會回傳 dynamic playlist URL
-// 若 Space 已結束，會回傳最終的 m3u8 URL
+// If the Space has not ended, it returns the dynamic playlist URL.
+// If the Space has ended, it returns the final m3u8 URL.
 func GetSourceLocation(ctx context.Context, client *client.Client, mediaKey string) (string, error) {
 	url := BaseStreamAPI + mediaKey
 
 	resp, err := client.Get(ctx, url, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get stream status for %s: %w", mediaKey, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read stream status response: %w", err)
 	}
 
 	if resp.StatusCode != 200 {
@@ -51,7 +51,7 @@ func GetSourceLocation(ctx context.Context, client *client.Client, mediaKey stri
 
 	var status StreamStatus
 	if err := json.Unmarshal(body, &status); err != nil {
-		return "", err
+		return "", fmt.Errorf("decode stream status JSON: %w", err)
 	}
 
 	if status.Source.Location == "" {
@@ -61,37 +61,37 @@ func GetSourceLocation(ctx context.Context, client *client.Client, mediaKey stri
 	return status.Source.Location, nil
 }
 
-// Segment 代表一個 m3u8 segment
+// Segment represents an m3u8 segment
 type Segment struct {
 	URI      string
 	Duration float64
 }
 
-// Playlist m3u8 播放清單
+// Playlist represents an m3u8 playlist
 type Playlist struct {
 	Segments []*Segment
 	BaseURL  string
 }
 
-// ParseM3U8 解析 m3u8 URL 並返回 Playlist
+// ParseM3U8 parses an m3u8 URL and returns a Playlist
 func ParseM3U8(ctx context.Context, client *client.Client, m3u8URL string) (*Playlist, error) {
 	resp, err := client.Get(ctx, m3u8URL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch m3u8 playlist: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read m3u8 playlist body: %w", err)
 	}
 
 	playlist, _, err := m3u8.DecodeFrom(strings.NewReader(string(body)), false)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode m3u8 playlist: %w", err)
 	}
 
-	// 計算 base URL
+	// Calculate base URL
 	baseURL := m3u8URL[:strings.LastIndex(m3u8URL, "/")+1]
 
 	// Media playlist
@@ -101,7 +101,7 @@ func ParseM3U8(ctx context.Context, client *client.Client, m3u8URL string) (*Pla
 	}
 	rawSegments := media.GetAllSegments()
 
-	// 轉換成我們的 Segment 類型
+	// Convert to our custom Segment type
 	segments := make([]*Segment, len(rawSegments))
 	for i, seg := range rawSegments {
 		segments[i] = &Segment{
@@ -116,7 +116,7 @@ func ParseM3U8(ctx context.Context, client *client.Client, m3u8URL string) (*Pla
 	}, nil
 }
 
-// GetFullURL 取得 segment 的完整 URL
+// GetFullURL returns the complete URL of the segment
 func (s *Segment) GetFullURL(baseURL string) string {
 	if strings.HasPrefix(s.URI, "http") {
 		return s.URI

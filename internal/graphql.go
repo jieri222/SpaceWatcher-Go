@@ -11,29 +11,29 @@ import (
 
 const baseUrl = "https://x.com"
 
-// 備用 QueryID (會定期更新，如果失敗可手動更新)
-// 可從瀏覽器 DevTools Network 找到 AudioSpaceById 請求
+// FallbackQueryID (updated periodically, can be updated manually if extraction fails)
+// Can be found via browser DevTools: Network -> search for "AudioSpaceById" request
 const FallbackQueryID = "_TgkQtc04XURgCocb1y9CA"
 
-// DiscoverQueryID 從 Space URL 取得 QueryID 並設定到 session
+// DiscoverQueryID extracts the QueryID from x.com dynamically and sets it in the session
 func (s *TwitterSession) DiscoverQueryID() error {
 	jsHash, err := s.extractJSHashFromPage()
 	if err != nil {
-		// 使用 fallback
-		logger.Warn("無法取得 JS hash，使用備用 QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
+		// Use fallback
+		logger.Warn("Failed to locate JS hash, using fallback QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
 		s.queryID = FallbackQueryID
 		return nil
 	}
 
 	queryID, featureSwitches, err := s.parseQueryIDFromJS(jsHash)
 	if err != nil {
-		// 使用 fallback
-		logger.Warn("無法取得 QueryID，使用備用 QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
+		// Use fallback
+		logger.Warn("Failed to parse QueryID, using fallback QueryID", "error", err, "fallbackQueryID", FallbackQueryID)
 		s.queryID = FallbackQueryID
 		return nil
 	}
 
-	logger.Debug("取得 QueryID", "queryID", queryID, "featureSwitches", featureSwitches)
+	logger.Debug("Got QueryID", "queryID", queryID, "featureSwitches", featureSwitches)
 	s.queryID = queryID
 	s.featureSwitches = featureSwitches
 	return nil
@@ -53,7 +53,7 @@ func (s *TwitterSession) extractJSHashFromPage() (string, error) {
 		return "", err
 	}
 
-	// Step 1: 找 chunk ID，例如 23441: "modules.audio"
+	// Step 1: Find the chunk ID, e.g., 23441: "modules.audio"
 	chunkIDPattern := regexp.MustCompile(`(\d+):\s*"modules\.audio"`)
 	chunkMatch := chunkIDPattern.FindSubmatch(body)
 	if len(chunkMatch) < 2 {
@@ -61,7 +61,7 @@ func (s *TwitterSession) extractJSHashFromPage() (string, error) {
 	}
 	chunkID := string(chunkMatch[1])
 
-	// Step 2: 找對應的 hash，例如 23441: "d85c73e"
+	// Step 2: Find the corresponding hash, e.g., 23441: "d85c73e"
 	hashPattern := regexp.MustCompile(chunkID + `:\s*"([a-fA-F0-9]+)"`)
 	hashMatch := hashPattern.FindSubmatch(body)
 	if len(hashMatch) < 2 {
@@ -71,7 +71,7 @@ func (s *TwitterSession) extractJSHashFromPage() (string, error) {
 	return string(hashMatch[1]), nil
 }
 
-// QueryInfo 存儲從 JS 提取的 GraphQL 查詢資訊
+// QueryInfo stores the GraphQL query information extracted from JS files
 type QueryInfo struct {
 	QueryID         string
 	FeatureSwitches []string
@@ -96,8 +96,8 @@ func (s *TwitterSession) parseQueryIDFromJS(jsHash string) (string, []string, er
 		return "", nil, err
 	}
 
-	// 提取 queryId 和整個 metadata 區塊
-	// 格式: queryId:"xxx",operationName:"AudioSpaceById",operationType:"query",metadata:{featureSwitches:[...]}
+	// Extract queryId and the entire metadata block
+	// Format: queryId:"xxx",operationName:"AudioSpaceById",operationType:"query",metadata:{featureSwitches:[...]}
 	pattern := `queryId:"([a-zA-Z0-9_-]+)",operationName:"AudioSpaceById",operationType:"query",metadata:\{featureSwitches:\[([^\]]*)\]`
 
 	re := regexp.MustCompile(pattern)
@@ -108,7 +108,7 @@ func (s *TwitterSession) parseQueryIDFromJS(jsHash string) (string, []string, er
 
 	queryID := string(match[1])
 
-	// 提取 featureSwitches 陣列內容
+	// Extract featureSwitches array content
 	var featureSwitches []string
 	if len(match) > 2 && len(match[2]) > 0 {
 		featurePattern := `"([^"]+)"`

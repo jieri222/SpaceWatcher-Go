@@ -11,28 +11,28 @@ import (
 )
 
 const (
-	// DefaultFilenameFormat 預設檔名格式
+	// DefaultFilenameFormat is the fallback filename format
 	DefaultFilenameFormat = "{date}_{title}.m4a"
 )
 
-// FilenameFormatter 檔名格式化器
+// FilenameFormatter formats output filenames
 type FilenameFormatter struct {
 	format string
 }
 
-// NewFilenameFormatter 建立格式化器
+// NewFilenameFormatter creates a new FilenameFormatter
 func NewFilenameFormatter(format string) *FilenameFormatter {
 	if format == "" {
 		format = DefaultFilenameFormat
 	}
-	logger.Debug("套用檔名格式", "format", format)
+	logger.Debug("Applied filename format", "format", format)
 	return &FilenameFormatter{format: format}
 }
 
-// Format 根據 metadata 生成檔名
-// 支援的變數: {date}, {time}, {datetime}, {title}, {creator_name}, {creator_screen_name}, {spaceID}
+// Format generates a filename based on Space metadata
+// Supported variables: {date}, {time}, {datetime}, {title}, {creator_name}, {creator_screen_name}, {spaceID}
 func (f *FilenameFormatter) Format(metadata *SpaceMetadata) string {
-	// 取得時間資訊
+	// Extract time information
 	var startTime time.Time
 	if metadata.StartedAt > 0 {
 		startTime = time.UnixMilli(metadata.StartedAt)
@@ -46,7 +46,7 @@ func (f *FilenameFormatter) Format(metadata *SpaceMetadata) string {
 		title = fmt.Sprintf("%s's Space", metadata.CreatorResults.Result.Core.Name)
 	}
 
-	// 準備替換變數
+	// Prepare replacement variables
 	replacements := map[string]string{
 		"{date}":                startTime.Format("20060102"),
 		"{time}":                startTime.Format("150405"),
@@ -62,8 +62,8 @@ func (f *FilenameFormatter) Format(metadata *SpaceMetadata) string {
 		result = strings.ReplaceAll(result, placeholder, value)
 	}
 
-	// 清理檔名中的非法字元 (只處理檔名部分，保留目錄路徑)
-	// 為確保跨平台相容性，所有平台都執行
+	// Clean out invalid characters from the filename (preserves directory path)
+	// Execute on all platforms for cross-platform compatibility
 	dir := filepath.Dir(result)
 	filename := filepath.Base(result)
 	filename = sanitizeFilename(filename)
@@ -76,17 +76,17 @@ func (f *FilenameFormatter) Format(metadata *SpaceMetadata) string {
 	return result
 }
 
-// sanitizeFilename 移除 Windows 檔名中的非法字元
+// sanitizeFilename removes characters that are unsupported by Windows
 func sanitizeFilename(name string) string {
-	// Windows 不允許: / \ : * ? " < > |
-	// 還有控制字元 0-31
+	// Windows does not allow: / \ : * ? " < > |
+	// Nor does it allow control characters 0-31
 	illegalChars := regexp.MustCompile(`[/\\:*?"<>|]`)
 	result := illegalChars.ReplaceAllString(name, "_")
 
-	// 移除開頭結尾空白
+	// Remove leading/trailing whitespaces
 	result = strings.TrimSpace(result)
 
-	// 避免空檔名
+	// Prevent empty filenames
 	if result == "" {
 		result = "space"
 	}

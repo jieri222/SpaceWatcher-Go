@@ -3,10 +3,12 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 
 	"github.com/jieri222/SpaceWatcher-Go/internal/client"
+	"github.com/jieri222/SpaceWatcher-Go/internal/logger"
 )
 
 const (
@@ -20,9 +22,14 @@ type TwitterSession struct {
 	featureSwitches []string
 }
 
-// NewTwitterSession 初始化一個帶有 Cookie 管理的 Session
+// NewTwitterSession initializes a Session with Cookie management
 func NewTwitterSession() *TwitterSession {
-	jar, _ := cookiejar.New(nil)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		// cookiejar.New(nil) should never fail, but handle defensively
+		logger.Error("failed to create cookie jar", "error", err)
+		panic("cookiejar.New: " + err.Error())
+	}
 	client := client.NewClient()
 	client.HTTPClient.Jar = jar
 	return &TwitterSession{
@@ -34,17 +41,19 @@ func (s *TwitterSession) RefreshGuestToken() error {
 	ctx := context.Background()
 
 	// get cookies from x.com
-	if _, err := s.client.Get(ctx, "https://x.com/", nil); err != nil {
-		return err
+	resp, err := s.client.Get(ctx, "https://x.com/", nil)
+	if err != nil {
+		return fmt.Errorf("fetch x.com for cookies: %w", err)
 	}
+	resp.Body.Close()
 
 	// exchange guest token
-	resp, err := s.client.Post(ctx, "https://api.twitter.com/1.1/guest/activate.json",
+	resp, err = s.client.Post(ctx, "https://api.twitter.com/1.1/guest/activate.json",
 		http.Header{
 			"Authorization": {"Bearer " + BearerToken},
 		})
 	if err != nil {
-		return err
+		return fmt.Errorf("activate guest token: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -52,34 +61,34 @@ func (s *TwitterSession) RefreshGuestToken() error {
 		GuestToken string `json:"guest_token"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return err
+		return fmt.Errorf("decode guest token response: %w", err)
 	}
 
 	s.guestToken = res.GuestToken
 	return nil
 }
 
-// GetGuestToken 取得當前 guest token
+// GetGuestToken gets current guest token
 func (s *TwitterSession) GetGuestToken() string {
 	return s.guestToken
 }
 
-// SetQueryID 設定 GraphQL Query ID
+// SetQueryID sets GraphQL Query ID
 func (s *TwitterSession) SetQueryID(id string) {
 	s.queryID = id
 }
 
-// GetQueryID 取得 GraphQL Query ID
+// GetQueryID gets GraphQL Query ID
 func (s *TwitterSession) GetQueryID() string {
 	return s.queryID
 }
 
-// GetFeatureSwitches 取得 GraphQL Feature Switches
+// GetFeatureSwitches gets GraphQL Feature Switches
 func (s *TwitterSession) GetFeatureSwitches() []string {
 	return s.featureSwitches
 }
 
-// GetClient 取得 HTTP client
+// GetClient gets HTTP client
 func (s *TwitterSession) GetClient() *client.Client {
 	return s.client
 }

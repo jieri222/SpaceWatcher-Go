@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 	"sync"
 	"time"
 
@@ -19,14 +18,14 @@ const (
 	DefaultRetry   = 3
 )
 
-// Downloader 下載器
+// Downloader handles the downloading process
 type Downloader struct {
 	session     *TwitterSession
 	concurrency int
 	retry       int
 }
 
-// NewDownloader 建立下載器
+// NewDownloader creates a new Downloader
 func NewDownloader(session *TwitterSession, concurrency int, retry int) *Downloader {
 	if concurrency <= 0 {
 		concurrency = DefaultWorkers
@@ -41,19 +40,19 @@ func NewDownloader(session *TwitterSession, concurrency int, retry int) *Downloa
 	}
 }
 
-// DownloadSpace 完整下載流程 (串流下載+合併)
+// DownloadSpace performs the complete download flow (stream download + merge)
 func (d *Downloader) DownloadSpace(ctx context.Context, m3u8URL string, metadata *SpaceMetadata, outputPath string) error {
-	// 解析 m3u8
-	logger.Info("解析播放清單...")
+	// Parse m3u8
+	logger.Info("Parsing playlist...")
 	playlist, err := m3u8.ParseM3U8(ctx, d.session.client, m3u8URL)
 	if err != nil {
-		return fmt.Errorf("failed to parse m3u8: %w", err)
+		return fmt.Errorf("parse m3u8: %w", err)
 	}
 	total := len(playlist.Segments)
-	logger.Info("找到 segments", "count", total)
+	logger.Info("Found segments", "count", total)
 
-	// 啟動 ffmpeg
-	logger.Info("開始下載", "concurrency", d.concurrency)
+	// Start ffmpeg
+	logger.Info("Starting download", "concurrency", d.concurrency)
 	title := metadata.Title
 	if title == "" {
 		title = fmt.Sprintf("%s's Space", metadata.CreatorResults.Result.Core.Name)
@@ -61,10 +60,10 @@ func (d *Downloader) DownloadSpace(ctx context.Context, m3u8URL string, metadata
 
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-loglevel", "error",
-		"-y",        // 覆蓋輸出
-		"-f", "aac", // 指定輸入格式
-		"-i", "pipe:0", // 從 stdin 讀取
-		"-c", "copy", // 無損複製
+		"-y",        // Overwrite output
+		"-f", "aac", // Specify input format
+		"-i", "pipe:0", // Read from stdin
+		"-c", "copy", // Lossless copy
 		"-metadata", "title="+title,
 		"-metadata", "artist="+metadata.CreatorResults.Result.Core.Name,
 		outputPath,
@@ -72,31 +71,31 @@ func (d *Downloader) DownloadSpace(ctx context.Context, m3u8URL string, metadata
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return fmt.Errorf("failed to create stdin pipe: %w", err)
+		return fmt.Errorf("create ffmpeg stdin pipe: %w", err)
 	}
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start ffmpeg: %w", err)
+		return fmt.Errorf("start ffmpeg: %w", err)
 	}
 
-	// 串流下載並寫入
+	// Stream download and write
 	downloadErr := d.streamDownloadAndMerge(ctx, playlist, stdin, total)
 
-	// 關閉 stdin 讓 ffmpeg 結束
+	// Close stdin to let ffmpeg exit
 	stdin.Close()
 
-	// 等待 ffmpeg
+	// Wait for ffmpeg
 	ffmpegErr := cmd.Wait()
 
-	// 優先返回下載錯誤
+	// Prioritize download errors
 	if downloadErr != nil {
 		return downloadErr
 	}
 	if ffmpegErr != nil {
-		// Context 取消造成的錯誤不算失敗
+		// Context cancellation is not a failure
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -106,14 +105,14 @@ func (d *Downloader) DownloadSpace(ctx context.Context, m3u8URL string, metadata
 	return nil
 }
 
-// SegmentResult 下載結果
+// SegmentResult represents the download result of a single segment
 type SegmentResult struct {
 	Index int
 	Data  []byte
 	Error error
 }
 
-// streamDownloadAndMerge 串流下載並按順序寫入 ffmpeg
+// streamDownloadAndMerge streams downloads and writes to ffmpeg sequentially
 func (d *Downloader) streamDownloadAndMerge(ctx context.Context, playlist *m3u8.Playlist, writer io.Writer, total int) error {
 	resultChan := make(chan SegmentResult, d.concurrency*2)
 	jobs := make(chan int, total)
@@ -146,7 +145,7 @@ func (d *Downloader) streamDownloadAndMerge(ctx context.Context, playlist *m3u8.
 		}()
 	}
 
-	// 發送任務
+	// Send jobs
 	go func() {
 		for i := range playlist.Segments {
 			select {
@@ -159,17 +158,17 @@ func (d *Downloader) streamDownloadAndMerge(ctx context.Context, playlist *m3u8.
 		close(jobs)
 	}()
 
-	// 關閉 resultChan
+	// Close resultChan
 	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
 
-	// 按順序寫入 - pending buffer 處理亂序到達
+	// Write sequentially - pending buffer handles out-of-order arrivals
 	pending := make(map[int][]byte)
 	nextExpected := 0
 	completed := 0
-	var downloadErrors []string
+	failedCount := 0
 
 	for result := range resultChan {
 		if ctx.Err() != nil {
@@ -178,23 +177,24 @@ func (d *Downloader) streamDownloadAndMerge(ctx context.Context, playlist *m3u8.
 
 		completed++
 		if result.Error != nil {
-			downloadErrors = append(downloadErrors, fmt.Sprintf("segment %d: %v", result.Index, result.Error))
+			failedCount++
+			logger.Warn("Segment download failed, skipped", "segment", result.Index, "error", result.Error)
 			continue
 		}
 
-		// 暫存或直接寫入
+		// Buffer or write directly
 		if result.Index == nextExpected {
-			// 直接寫入
+			// Write directly
 			if _, err := writer.Write(result.Data); err != nil {
-				return fmt.Errorf("failed to write segment %d: %w", result.Index, err)
+				return fmt.Errorf("write segment %d to ffmpeg: %w", result.Index, err)
 			}
 			nextExpected++
 
-			// Flush pending 中連續的 segments
+			// Flush consecutive segments from pending buffer
 			for {
 				if data, ok := pending[nextExpected]; ok {
 					if _, err := writer.Write(data); err != nil {
-						return fmt.Errorf("failed to write segment %d: %w", nextExpected, err)
+						return fmt.Errorf("write segment %d to ffmpeg: %w", nextExpected, err)
 					}
 					delete(pending, nextExpected)
 					nextExpected++
@@ -203,38 +203,43 @@ func (d *Downloader) streamDownloadAndMerge(ctx context.Context, playlist *m3u8.
 				}
 			}
 		} else {
-			// 暫存
+			// Add to pending buffer
 			pending[result.Index] = result.Data
 		}
 
 		if completed%50 == 0 || completed == total {
-			logger.Info("下載進度", "completed", completed, "total", total)
+			logger.Info("Download progress", "completed", completed, "total", total)
 		}
 	}
 
-	if len(downloadErrors) > 0 {
-		return fmt.Errorf("download errors: %s", strings.Join(downloadErrors, "; "))
+	if failedCount > 0 {
+		failRate := float64(failedCount) / float64(total)
+		logger.Warn("Some segments failed to download", "failed", failedCount, "total", total)
+		if failRate >= 0.05 {
+			return fmt.Errorf("too many segment download failures: %d/%d (%.1f%%)", failedCount, total, failRate*100)
+		}
 	}
 
 	return nil
 }
 
-// downloadSegment 下載單個 segment
+// downloadSegment downloads a single segment
 func (d *Downloader) downloadSegment(ctx context.Context, url string) ([]byte, error) {
 	resp, err := d.session.client.Get(ctx, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GET segment: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
+		return nil, fmt.Errorf("segment HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
 	return io.ReadAll(resp.Body)
 }
 
-// downloadSegmentWithRetry 帶重試的下載
+// downloadSegmentWithRetry downloads a segment with retries
 func (d *Downloader) downloadSegmentWithRetry(ctx context.Context, url string, maxRetries int) ([]byte, error) {
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
@@ -251,8 +256,7 @@ func (d *Downloader) downloadSegmentWithRetry(ctx context.Context, url string, m
 			return data, nil
 		}
 		lastErr = err
-		logger.Debug("segment 下載失敗，重試中", "attempt", i+1, "maxRetry", maxRetries, "error", err)
+		logger.Debug("Segment download failed, retrying", "attempt", i+1, "maxRetry", maxRetries, "error", err)
 	}
-	logger.Error("segment 下載失敗", "url", url, "error", lastErr)
 	return nil, lastErr
 }

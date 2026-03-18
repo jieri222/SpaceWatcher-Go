@@ -14,7 +14,7 @@ import (
 	"github.com/Eyevinn/hls-m3u8/m3u8"
 )
 
-// GetMasterPlaylistURL 將 dynamic playlist URL 轉換為 master playlist URL
+// GetMasterPlaylistURL converts a dynamic playlist URL to a master playlist URL
 func GetMasterPlaylistURL(ctx context.Context, client *client.Client, mediaKey string) (string, error) {
 	dynamicURL, err := GetSourceLocation(ctx, client, mediaKey)
 	if err != nil {
@@ -25,18 +25,18 @@ func GetMasterPlaylistURL(ctx context.Context, client *client.Client, mediaKey s
 	return strings.Join(baseUrl, "/") + "/master_playlist.m3u8", nil
 }
 
-// ResolveMasterPlaylist 解析 master playlist，取得裡面的 media playlist URL
-// master playlist 裡會列出不同 bandwidth 的 variant，這裡取第一個
+// ResolveMasterPlaylist parses the master playlist to get the media playlist URL nested inside.
+// A master playlist lists different bandwidth variants; this function selects the first one.
 func ResolveMasterPlaylist(ctx context.Context, client *client.Client, masterURL string) (string, error) {
 	resp, err := client.Get(ctx, masterURL, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("fetch master playlist: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read master playlist body: %w", err)
 	}
 
 	if resp.StatusCode != 200 {
@@ -45,12 +45,12 @@ func ResolveMasterPlaylist(ctx context.Context, client *client.Client, masterURL
 
 	playlist, _, err := m3u8.DecodeFrom(strings.NewReader(string(body)), false)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("decode master playlist: %w", err)
 	}
 
 	master, ok := playlist.(*m3u8.MasterPlaylist)
 	if !ok {
-		// 如果已經是 media playlist，直接回傳 masterURL 本身
+		// If it's already a media playlist, return the masterURL directly
 		return masterURL, nil
 	}
 
@@ -59,52 +59,55 @@ func ResolveMasterPlaylist(ctx context.Context, client *client.Client, masterURL
 		return "", fmt.Errorf("master playlist has no variants")
 	}
 
-	// 取第一個 variant 的 URI
+	// Obtain the URI of the first variant
 	variantURI := variants[0].URI
 	if strings.HasPrefix(variantURI, "http") {
 		return variantURI, nil
 	}
 
-	// 相對路徑，拼接 base URL（處理重疊路徑）
+	// Relative path, construct with the base URL (handles overlapping paths)
 	baseURL := masterURL[:strings.LastIndex(masterURL, "/")+1]
-	mediaURL := resolveOverlappingPath(baseURL, variantURI)
+	mediaURL, err := resolveOverlappingPath(baseURL, variantURI)
+	if err != nil {
+		return "", fmt.Errorf("resolve variant path: %w", err)
+	}
 
-	// 把 transcode 改成 non_transcode
+	// Change "transcode" to "non_transcode"
 	mediaURL = strings.Replace(mediaURL, "transcode", "non_transcode", 1)
 
-	// 刪除 JWT token：periscope-replay-direct-prod-[region]-public 之後與 audio-space 之間的部分
+	// Remove JWT token piece: the exact part strictly between periscope-replay-direct-prod-[region]-public and audio-space
 	re := regexp.MustCompile(`(periscope-replay-direct-prod-[^/]+-public/)[^/]+(/audio-space)`)
 	mediaURL = re.ReplaceAllString(mediaURL, "${1}audio-space")
 
-	logger.Debug("解析出 media playlist", "url", mediaURL)
+	logger.Debug("Parsed media playlist", "url", mediaURL)
 	return mediaURL, nil
 }
 
-// resolveOverlappingPath 拼接 baseURL 和 relPath，處理路徑重疊
-// 優先使用 net/url 處理標準的絕對路徑或無重疊相對路徑
-// 若為相對路徑且存在重疊段，例如 baseURL = "https://host/a/b/c/" 且 relPath = "b/c/seg.ts"
-// 會找到重疊的 "b/c/"，回傳 "https://host/a/b/c/seg.ts"
-func resolveOverlappingPath(baseURL, relPath string) string {
+// resolveOverlappingPath concatenates baseURL and relPath, addressing any path overlaps.
+// It prioritizes standard net/url logic for pure absolute or non-overlapping relative paths.
+// But if there's overlap like baseURL = "https://host/a/b/c/" and relPath = "b/c/seg.ts",
+// it stitches them cleanly as "https://host/a/b/c/seg.ts".
+func resolveOverlappingPath(baseURL, relPath string) (string, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("parse base URL %q: %w", baseURL, err)
 	}
 	rel, err := url.Parse(relPath)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("parse relative path %q: %w", relPath, err)
 	}
 
-	// 如果是絕對路徑（以 / 開頭），直接使用標準 URL 解析組合
+	// If absolute path (starts with /), use standard URL referencing
 	if strings.HasPrefix(relPath, "/") {
-		return u.ResolveReference(rel).String()
+		return u.ResolveReference(rel).String(), nil
 	}
 
-	// 對於相對路徑，先嘗試重疊邏輯
+	// For relative paths, perform overlap matching first
 	relPathTrimmed := strings.TrimLeft(relPath, "/")
 	baseParts := strings.Split(strings.TrimRight(baseURL, "/"), "/")
 	relParts := strings.Split(relPathTrimmed, "/")
 
-	// 嘗試從 relPath 的第一段在 baseURL 中找到匹配位置
+	// Attempt to find overlap by matching the leading chunk of relPath anywhere within baseURL
 	for i := 0; i < len(baseParts); i++ {
 		if baseParts[i] == relParts[0] {
 			match := true
@@ -119,10 +122,10 @@ func resolveOverlappingPath(baseURL, relPath string) string {
 				}
 			}
 			if match {
-				// 從重疊處開始拼接
-				return strings.Join(baseParts[:i], "/") + "/" + relPathTrimmed
+				// We matched, assemble combining the overlapping regions
+				return strings.Join(baseParts[:i], "/") + "/" + relPathTrimmed, nil
 			}
 		}
 	}
-	return u.ResolveReference(rel).String()
+	return u.ResolveReference(rel).String(), nil
 }

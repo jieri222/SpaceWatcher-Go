@@ -8,15 +8,15 @@ import (
 	"time"
 )
 
-// Client 結構包含 HTTP 客戶端。
+// Client struct holds the HTTP client.
 type Client struct {
 	HTTPClient     *http.Client
 	DefaultHeaders http.Header
 }
 
-// NewClient 建立一個新的 Client 實例，並配置優化的連線池。
+// NewClient creates a new Client instance with optimized connection pool.
 func NewClient() *Client {
-	// 優化的 Transport 配置
+	// Optimized Transport configuration
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -25,7 +25,7 @@ func NewClient() *Client {
 		}).DialContext,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   20, // 增加每個 host 的連線池
+		MaxIdleConnsPerHost:   20, // Increase connection pool per host
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
@@ -33,7 +33,7 @@ func NewClient() *Client {
 
 	return &Client{
 		HTTPClient: &http.Client{
-			Timeout:   60 * time.Second, // 增加到 60 秒以應對大檔案
+			Timeout:   60 * time.Second, // Increase to 60s for large files
 			Transport: transport,
 		},
 		DefaultHeaders: http.Header{

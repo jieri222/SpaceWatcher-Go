@@ -12,7 +12,7 @@ import (
 	"github.com/jieri222/SpaceWatcher-Go/internal/logger"
 )
 
-// AudioSpaceById 取得 Space 的 metadata
+// AudioSpaceById retrieves Space metadata given a Space ID
 func (s *TwitterSession) AudioSpaceById(spaceID string) (*AudioSpaceByIdResponse, error) {
 	ctx := context.Background()
 
@@ -26,14 +26,17 @@ func (s *TwitterSession) AudioSpaceById(spaceID string) (*AudioSpaceByIdResponse
 	featureSwitches := s.GetFeatureSwitches()
 	features := "{" + strings.Join(featureSwitches, ",") + "}"
 
-	// 組裝 URL
-	apiURL, _ := url.Parse("https://api.x.com/graphql/" + s.queryID + "/AudioSpaceById")
+	// Build URL
+	apiURL, err := url.Parse("https://api.x.com/graphql/" + s.queryID + "/AudioSpaceById")
+	if err != nil {
+		return nil, fmt.Errorf("parse AudioSpaceById URL: %w", err)
+	}
 	q := apiURL.Query()
 	q.Set("variables", variables)
 	q.Set("features", features)
 	apiURL.RawQuery = q.Encode()
 
-	// 發送請求
+	// Send request
 	body, err := doAudioSpaceByIdRequest(ctx, s, apiURL.String(), 0)
 	if err != nil {
 		return nil, err
@@ -43,7 +46,7 @@ func (s *TwitterSession) AudioSpaceById(spaceID string) (*AudioSpaceByIdResponse
 }
 
 func doAudioSpaceByIdRequest(ctx context.Context, session *TwitterSession, url string, retryCount int) ([]byte, error) {
-	// 確保有 guest token
+	// Ensure guest token is present
 	if session.guestToken == "" {
 		if err := session.RefreshGuestToken(); err != nil {
 			return nil, fmt.Errorf("failed to refresh guest token: %w", err)
@@ -56,35 +59,35 @@ func doAudioSpaceByIdRequest(ctx context.Context, session *TwitterSession, url s
 		"Content-Type":  {"application/json"},
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("request AudioSpaceById: %w", err)
 	}
 
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read AudioSpaceById response: %w", err)
 	}
 
 	switch resp.StatusCode {
 	case 200:
 		return body, nil
-	case 403: // 如果是 403，嘗試刷新 token 並重試
+	case 403: // Upon 403 error, attempt to refresh token and retry
 		if retryCount >= 3 {
 			return nil, fmt.Errorf("API error 403 after retry: %s", string(body))
 		}
-		logger.Warn("Guest token 可能已過期，嘗試刷新", "statusCode", resp.StatusCode)
+		logger.Warn("Guest token might be expired, attempting to refresh", "statusCode", resp.StatusCode)
 		if err := session.RefreshGuestToken(); err != nil {
 			return nil, fmt.Errorf("failed to refresh guest token after 403: %w", err)
 		}
-		logger.Debug("Guest token 已刷新", "token", session.guestToken)
+		logger.Debug("Guest token refreshed", "token", session.guestToken)
 		return doAudioSpaceByIdRequest(ctx, session, url, retryCount+1)
 	default:
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 }
 
-// AudioSpaceByIdResponse GraphQL 回應結構
+// AudioSpaceByIdResponse represents the structure of the GraphQL response
 type AudioSpaceByIdResponse struct {
 	Data struct {
 		AudioSpace struct {
@@ -94,7 +97,7 @@ type AudioSpaceByIdResponse struct {
 	} `json:"data"`
 }
 
-// SpaceMetadata Space 的 metadata
+// SpaceMetadata defines metadata associated with a Space
 type SpaceMetadata struct {
 	RestID                    string `json:"rest_id"`
 	State                     string `json:"state"`
@@ -112,7 +115,7 @@ type SpaceMetadata struct {
 	} `json:"creator_results"`
 }
 
-// SpaceParticipant Space 的參與者
+// SpaceParticipant outlines participants within the Space
 type SpaceParticipant struct {
 	Admins []struct {
 		TwitterScreenName string `json:"twitter_screen_name"`
