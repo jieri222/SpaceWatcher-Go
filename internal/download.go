@@ -207,8 +207,13 @@ func (d *Downloader) streamDownloadAndMerge(ctx context.Context, playlist *m3u8.
 			pending[result.Index] = result.Data
 		}
 
-		if completed%50 == 0 || completed == total {
-			logger.Info("Download progress", "completed", completed, "total", total)
+		// Update every 10 segments or the last one
+		if completed%10 == 0 || completed == total {
+			// Use \r to reset cursor and \033[K to clear remaining characters on the line to avoid old content remaining
+			fmt.Printf("\r\033[K%s \033[32m[INFO ]\033[0m Download progress \033[90m|\033[0m progress: %d/%d", time.Now().Format("2006-01-02 15:04:05-07"), completed, total)
+			if completed == total {
+				fmt.Println() // Newline after download completes
+			}
 		}
 	}
 

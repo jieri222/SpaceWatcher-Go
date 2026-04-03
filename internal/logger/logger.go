@@ -62,8 +62,8 @@ func (h *ConsoleHandler) Handle(ctx context.Context, r slog.Record) error {
 		levelStr = r.Level.String()
 	}
 
-	// Format: TIME [LEVEL] MESSAGE
-	fmt.Fprintf(h.w, "%s %s[%s]%s %s", timestamp, levelColor, levelStr, resetColor, r.Message)
+	// Format: \r\033[K TIME [LEVEL] MESSAGE (確保清空目前的 progress line，避免重疊)
+	fmt.Fprintf(h.w, "\r\033[K%s %s[%s]%s %s", timestamp, levelColor, levelStr, resetColor, r.Message)
 
 	// Helper to format attributes
 	hasAttrs := false
