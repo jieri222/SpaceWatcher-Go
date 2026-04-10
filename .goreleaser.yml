@@ -1,0 +1,49 @@
+# .goreleaser.yml
+# See https://goreleaser.com for full documentation
+
+version: 2
+
+project_name: SpaceWatcher-Go
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: SpaceWatcher-go
+    main: ./cmd
+    binary: SpaceWatcher-go
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - name_template: "{{ .Binary }}-{{ .Os }}-{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
