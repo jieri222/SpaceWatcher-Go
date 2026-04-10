@@ -62,7 +62,7 @@ func doAudioSpaceByIdRequest(ctx context.Context, session *TwitterSession, url s
 		return nil, fmt.Errorf("request AudioSpaceById: %w", err)
 	}
 
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

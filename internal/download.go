@@ -234,7 +234,7 @@ func (d *Downloader) downloadSegment(ctx context.Context, url string) ([]byte, e
 	if err != nil {
 		return nil, fmt.Errorf("GET segment: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 200))

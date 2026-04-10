@@ -45,7 +45,7 @@ func (s *TwitterSession) RefreshGuestToken() error {
 	if err != nil {
 		return fmt.Errorf("fetch x.com for cookies: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// exchange guest token
 	resp, err = s.client.Post(ctx, "https://api.twitter.com/1.1/guest/activate.json",
@@ -55,7 +55,7 @@ func (s *TwitterSession) RefreshGuestToken() error {
 	if err != nil {
 		return fmt.Errorf("activate guest token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var res struct {
 		GuestToken string `json:"guest_token"`
