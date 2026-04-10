@@ -41,26 +41,26 @@ func (s *TwitterSession) RefreshGuestToken() error {
 	ctx := context.Background()
 
 	// get cookies from x.com
-	resp, err := s.client.Get(ctx, "https://x.com/", nil)
+	respCookies, err := s.client.Get(ctx, "https://x.com/", nil)
 	if err != nil {
 		return fmt.Errorf("fetch x.com for cookies: %w", err)
 	}
-	_ = resp.Body.Close()
+	defer func() { _ = respCookies.Body.Close() }()
 
 	// exchange guest token
-	resp, err = s.client.Post(ctx, "https://api.twitter.com/1.1/guest/activate.json",
+	respToken, err := s.client.Post(ctx, "https://api.twitter.com/1.1/guest/activate.json",
 		http.Header{
 			"Authorization": {"Bearer " + BearerToken},
 		})
 	if err != nil {
 		return fmt.Errorf("activate guest token: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = respToken.Body.Close() }()
 
 	var res struct {
 		GuestToken string `json:"guest_token"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+	if err := json.NewDecoder(respToken.Body).Decode(&res); err != nil {
 		return fmt.Errorf("decode guest token response: %w", err)
 	}
 
