@@ -63,7 +63,7 @@ func (h *ConsoleHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	// Format: \r\033[K TIME [LEVEL] MESSAGE (確保清空目前的 progress line，避免重疊)
-	fmt.Fprintf(h.w, "\r\033[K%s %s[%s]%s %s", timestamp, levelColor, levelStr, resetColor, r.Message)
+	_, _ = fmt.Fprintf(h.w, "\r\033[K%s %s[%s]%s %s", timestamp, levelColor, levelStr, resetColor, r.Message)
 
 	// Helper to format attributes
 	hasAttrs := false
@@ -72,13 +72,13 @@ func (h *ConsoleHandler) Handle(ctx context.Context, r slog.Record) error {
 			return // ignore empty attributes
 		}
 		if !hasAttrs {
-			fmt.Fprintf(h.w, " %s|%s", dimColor, resetColor)
+			_, _ = fmt.Fprintf(h.w, " %s|%s", dimColor, resetColor)
 			hasAttrs = true
 		} else {
-			fmt.Fprintf(h.w, "%s,%s", dimColor, resetColor)
+			_, _ = fmt.Fprintf(h.w, "%s,%s", dimColor, resetColor)
 		}
 		key := prefix + a.Key
-		fmt.Fprintf(h.w, " %s%s:%s %v", dimColor, key, resetColor, a.Value.Any())
+		_, _ = fmt.Fprintf(h.w, " %s%s:%s %v", dimColor, key, resetColor, a.Value.Any())
 	}
 
 	// Group prefix
@@ -98,7 +98,7 @@ func (h *ConsoleHandler) Handle(ctx context.Context, r slog.Record) error {
 		return true
 	})
 
-	fmt.Fprintln(h.w)
+	_, _ = fmt.Fprintln(h.w)
 	return nil
 }
 

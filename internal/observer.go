@@ -56,7 +56,7 @@ func (o *Observer) Resolve(ctx context.Context, spaceID string) (*WaitResult, er
 
 	// 2. Validate state existence
 	if metadata.State == "" {
-		return nil, fmt.Errorf("Space does not exist or has been deleted: %s", spaceID)
+		return nil, fmt.Errorf("space does not exist or has been deleted: %s", spaceID)
 	}
 
 	logger.Info("Got Space info", "title", metadata.Title, "state", metadata.State)
@@ -68,17 +68,17 @@ func (o *Observer) Resolve(ctx context.Context, spaceID string) (*WaitResult, er
 	case StateRunning, StateNotStarted:
 		return o.waitUntilEnded(ctx, spaceID, metadata)
 	default:
-		return nil, fmt.Errorf("Unknown Space state: %s", metadata.State)
+		return nil, fmt.Errorf("unknown space state: %s", metadata.State)
 	}
 }
 
 // resolveEnded processes Spaces that have already ended
 func (o *Observer) resolveEnded(ctx context.Context, spaceID string, metadata *SpaceMetadata) (*WaitResult, error) {
 	if !metadata.IsSpaceAvailableforReplay {
-		return nil, fmt.Errorf("Space has ended and does not support replay, cannot download")
+		return nil, fmt.Errorf("space has ended and does not support replay, cannot download")
 	}
 	if metadata.MediaKey == "" {
-		return nil, fmt.Errorf("This Space does not support downloading (no MediaKey)")
+		return nil, fmt.Errorf("this space does not support downloading (no MediaKey)")
 	}
 
 	logger.Info("Space has ended, getting stream URL...")
@@ -86,7 +86,7 @@ func (o *Observer) resolveEnded(ctx context.Context, spaceID string, metadata *S
 	// Request the dynamic playlist URL (finished Spaces return the final direct m3u8)
 	m3u8URL, err := m3u8.GetSourceLocation(ctx, o.session.client, metadata.MediaKey)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to retrieve stream URL: %w", err)
+		return nil, fmt.Errorf("failed to retrieve stream URL: %w", err)
 	}
 
 	logger.Debug("Got media playlist URL", "url", m3u8URL)
@@ -135,7 +135,7 @@ func (o *Observer) waitUntilEnded(ctx context.Context, spaceID string, metadata 
 				consecutiveErrors++
 				logger.Warn("Query failed, retrying", "error", err, "attempt", consecutiveErrors, "maxRetry", o.retry)
 				if consecutiveErrors >= o.retry {
-					return nil, fmt.Errorf("Query failed exceeding retry limit: %w", err)
+					return nil, fmt.Errorf("query failed exceeding retry limit: %w", err)
 				}
 				continue
 			}
@@ -159,7 +159,7 @@ func (o *Observer) waitUntilEnded(ctx context.Context, spaceID string, metadata 
 				logger.Debug("Space has ended, parsing master playlist")
 
 				if masterURL == "" {
-					return nil, fmt.Errorf("Space has ended but failed to get Master Playlist URL")
+					return nil, fmt.Errorf("space has ended but failed to get master playlist URL")
 				}
 
 				m3u8URL, err := m3u8.ResolveMasterPlaylist(ctx, o.session.client, masterURL)

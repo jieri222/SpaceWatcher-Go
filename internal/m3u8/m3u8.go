@@ -38,7 +38,7 @@ func GetSourceLocation(ctx context.Context, client *client.Client, mediaKey stri
 	if err != nil {
 		return "", fmt.Errorf("get stream status for %s: %w", mediaKey, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -79,7 +79,7 @@ func ParseM3U8(ctx context.Context, client *client.Client, m3u8URL string) (*Pla
 	if err != nil {
 		return nil, fmt.Errorf("fetch m3u8 playlist: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

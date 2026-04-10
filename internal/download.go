@@ -85,7 +85,7 @@ func (d *Downloader) DownloadSpace(ctx context.Context, m3u8URL string, metadata
 	downloadErr := d.streamDownloadAndMerge(ctx, playlist, stdin, total)
 
 	// Close stdin to let ffmpeg exit
-	stdin.Close()
+	_ = stdin.Close()
 
 	// Wait for ffmpeg
 	ffmpegErr := cmd.Wait()
