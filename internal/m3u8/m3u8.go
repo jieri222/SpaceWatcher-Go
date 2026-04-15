@@ -3,6 +3,7 @@ package m3u8
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -13,6 +14,9 @@ import (
 )
 
 const BaseStreamAPI = "https://api.x.com/1.1/live_video_stream/status/"
+
+// ErrStreamNotFound indicates that the stream status API returned a 404
+var ErrStreamNotFound = errors.New("stream status API error 404")
 
 // StreamStatus represents the live_video_stream/status response
 type StreamStatus struct {
@@ -45,7 +49,12 @@ func GetSourceLocation(ctx context.Context, client *client.Client, mediaKey stri
 		return "", fmt.Errorf("read stream status response: %w", err)
 	}
 
-	if resp.StatusCode != 200 {
+	switch resp.StatusCode {
+	case 200:
+		break
+	case 404:
+		return "", ErrStreamNotFound
+	default:
 		return "", fmt.Errorf("stream status API error %d: %s", resp.StatusCode, string(body))
 	}
 

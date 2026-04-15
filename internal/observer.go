@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -104,20 +105,12 @@ func (o *Observer) waitUntilEnded(ctx context.Context, spaceID string, metadata 
 	result := &WaitResult{SpaceID: spaceID, Metadata: metadata}
 
 	if metadata.State == StateNotStarted {
-		logger.Info("Space has not started yet, will wait for it to start and then wait for it to end", "spaceID", spaceID)
+		logger.Info("Space has not started yet, will wait for it to start and then wait for it to end")
 	} else {
-		logger.Info("Space is running, waiting for it to end", "state", metadata.State)
+		logger.Info("Space is running, waiting for it to end")
 	}
 
-	// Capture m3u8 URL; requires a MediaKey, which might not be generated yet if NotStarted
 	var masterURL string
-	var err error
-	if metadata.MediaKey != "" {
-		masterURL, err = o.fetchMasterURL(ctx, metadata.MediaKey)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	// Begin polling
 	logger.Info("Starting to wait for Space to end", "spaceID", spaceID, "interval", o.interval)
@@ -126,11 +119,53 @@ func (o *Observer) waitUntilEnded(ctx context.Context, spaceID string, metadata 
 
 	consecutiveErrors := 0
 	for {
+		// 1. Fetch Master URL if missing (it will retry next time if it fails here)
+		if masterURL == "" && metadata.MediaKey != "" {
+			var err error
+			masterURL, err = o.fetchMasterURL(ctx, metadata.MediaKey)
+			if err != nil {
+				if errors.Is(err, m3u8.ErrStreamNotFound) {
+					// This is expected behavior (especially when NotStarted), change to Debug to avoid spamming
+					logger.Debug("Master Playlist URL not ready yet, retrying...")
+				} else {
+					return nil, fmt.Errorf("failed to get Master Playlist URL: %w", err)
+				}
+			}
+		}
+
+		// 2. If space has ended, perform final processing and return
+		if metadata.State == StateEnded {
+			result.FinalState = StateEnded
+			logger.Debug("Space has ended, parsing master playlist")
+
+			// If no masterURL was captured during the live stream, and the space supports replay, try to fetch it one last time
+			if masterURL == "" && metadata.IsSpaceAvailableforReplay {
+				var err error
+				masterURL, err = o.fetchMasterURL(ctx, metadata.MediaKey)
+				if err != nil {
+					return nil, fmt.Errorf("space has ended and failed to retrieve replay URL: %w", err)
+				}
+			}
+
+			if masterURL == "" {
+				return nil, fmt.Errorf("space has ended but no master playlist URL was captured (is replay disabled?)")
+			}
+
+			m3u8URL, err := m3u8.ResolveMasterPlaylist(ctx, o.session.client, masterURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse master playlist: %w", err)
+			}
+			result.M3U8URL = m3u8URL
+			logger.Debug("Got media playlist URL", "url", m3u8URL)
+			return result, nil
+		}
+
+		// 3. Wait for the next tick or context cancellation
 		select {
 		case <-ctx.Done():
 			return result, ctx.Err()
 		case <-ticker.C:
-			metadata, err := o.fetchStatus(spaceID)
+			newMetadata, err := o.fetchStatus(spaceID)
 			if err != nil {
 				consecutiveErrors++
 				logger.Warn("Query failed, retrying", "error", err, "attempt", consecutiveErrors, "maxRetry", o.retry)
@@ -139,37 +174,10 @@ func (o *Observer) waitUntilEnded(ctx context.Context, spaceID string, metadata 
 				}
 				continue
 			}
-			consecutiveErrors = 0 // Reset on successful fetch
-
+			consecutiveErrors = 0
+			metadata = newMetadata
 			result.Metadata = metadata
-
 			logger.Debug("Checking Space status", "spaceID", spaceID, "state", metadata.State)
-
-			// If formerly NotStarted, and now MediaKey is populated, obtain the masterURL
-			if masterURL == "" && metadata.MediaKey != "" {
-				masterURL, err = o.fetchMasterURL(ctx, metadata.MediaKey)
-				if err != nil {
-					logger.Warn("Failed to get Master Playlist URL, will retry next time", "error", err)
-					continue
-				}
-			}
-
-			if metadata.State == StateEnded {
-				result.FinalState = StateEnded
-				logger.Debug("Space has ended, parsing master playlist")
-
-				if masterURL == "" {
-					return nil, fmt.Errorf("space has ended but failed to get master playlist URL")
-				}
-
-				m3u8URL, err := m3u8.ResolveMasterPlaylist(ctx, o.session.client, masterURL)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse master playlist: %w", err)
-				}
-				result.M3U8URL = m3u8URL
-				logger.Debug("Got media playlist URL", "url", m3u8URL)
-				return result, nil
-			}
 		}
 	}
 }
