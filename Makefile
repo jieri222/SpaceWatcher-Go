@@ -23,7 +23,7 @@ test:
 .PHONY: lint
 lint:
 	@echo "==> Running golangci-lint..."
-	@golangci-lint run
+	@golangci-lint-v2 run
 
 ## tidy: 整理 Go modules
 .PHONY: tidy
