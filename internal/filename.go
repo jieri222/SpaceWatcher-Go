@@ -3,7 +3,6 @@ package internal
 import (
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -35,9 +34,9 @@ func (f *FilenameFormatter) Format(metadata *SpaceMetadata) string {
 	// Extract time information
 	var startTime time.Time
 	if metadata.StartedAt > 0 {
-		startTime = time.UnixMilli(metadata.StartedAt)
+		startTime = time.UnixMilli(metadata.StartedAt).UTC()
 	} else {
-		startTime = time.Now()
+		startTime = time.Now().UTC()
 	}
 
 	// Title fallback
@@ -46,15 +45,15 @@ func (f *FilenameFormatter) Format(metadata *SpaceMetadata) string {
 		title = fmt.Sprintf("%s's Space", metadata.CreatorResults.Result.Core.Name)
 	}
 
-	// Prepare replacement variables
+	// Prepare replacement variables (sanitized to prevent breaking directory structure)
 	replacements := map[string]string{
 		"{date}":                startTime.Format("20060102"),
 		"{time}":                startTime.Format("150405"),
 		"{datetime}":            startTime.Format("20060102_150405"),
-		"{title}":               title,
-		"{creator_name}":        metadata.CreatorResults.Result.Core.Name,
-		"{creator_screen_name}": fmt.Sprintf("@%s", metadata.CreatorResults.Result.Core.ScreenName),
-		"{spaceID}":             metadata.RestID,
+		"{title}":               sanitizeFilename(title),
+		"{creator_name}":        sanitizeFilename(metadata.CreatorResults.Result.Core.Name),
+		"{creator_screen_name}": sanitizeFilename(fmt.Sprintf("@%s", metadata.CreatorResults.Result.Core.ScreenName)),
+		"{spaceID}":             sanitizeFilename(metadata.RestID),
 	}
 
 	result := f.format
@@ -78,10 +77,28 @@ func (f *FilenameFormatter) Format(metadata *SpaceMetadata) string {
 
 // sanitizeFilename removes characters that are unsupported by Windows
 func sanitizeFilename(name string) string {
-	// Windows does not allow: / \ : * ? " < > |
-	// Nor does it allow control characters 0-31
-	illegalChars := regexp.MustCompile(`[/\\:*?"<>|]`)
-	result := illegalChars.ReplaceAllString(name, "_")
+	// Map illegal Windows characters to their full-width equivalents
+	// This preserves the visual look while ensuring filesystem compatibility
+	replacer := strings.NewReplacer(
+		"/", "∕", // U+2215
+		"\\", "⧵", // U+29F5
+		":", "꞉", // U+A789
+		"*", "∗", // U+2217
+		"?", "？", // U+ff1f
+		"\"", "″", // U+2033
+		"<", "˂", // U+02C2
+		">", "˃", // U+02C3
+		"|", "⏐", // U+23D0
+	)
+	result := replacer.Replace(name)
+
+	// Remove control characters (0-31) and 127 (DEL)
+	result = strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return -1 // Drop the character
+		}
+		return r
+	}, result)
 
 	// Remove leading/trailing whitespaces
 	result = strings.TrimSpace(result)
